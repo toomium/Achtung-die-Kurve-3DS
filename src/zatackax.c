@@ -3331,7 +3331,11 @@ void displayRoundEnd(void)
 {
     /* The field stays as it was, with a banner in the middle. */
     useTopView();
-    SDL_Rect banner = {screen->w / 2 - 120, screen->h / 2 - 30, 240, 60};
+    /* With several consoles the READY situation is part of the banner: it is
+     * drawn over a card, so the old text is gone. */
+    int extra = netGameRole() != NET_ROLE_NONE ? 26 : 0;
+    SDL_Rect banner = {screen->w / 2 - 120, screen->h / 2 - 30 - extra / 2,
+                       240, 60 + extra};
     SDL_Color color = roundWinner >= 0 ? colors[players[roundWinner].color]
                                        : uiColAccent;
     banner = uiCard(screen, banner, uiColPanel, color, false);
@@ -3348,7 +3352,7 @@ void displayRoundEnd(void)
         char status[32];
         netGameStatus(status, sizeof(status));
         uiText(screen, FONT_BROADCAST, status, uiColAccent, screen->w / 2,
-               banner.y + banner.h + 16, UI_CENTER);
+               banner.y + 66, UI_CENTER);
     }
 
     drawScoreBars(roundWinner, false);
