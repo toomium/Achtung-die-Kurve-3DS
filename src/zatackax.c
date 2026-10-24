@@ -22,6 +22,7 @@
 #include "ui3ds.h"
 #include "touch3ds.h"
 #include "netmenu3ds.h"
+#include "netgame3ds.h"
 #include "demo3ds.h"
 #endif
 
@@ -342,6 +343,9 @@ void killPlayer(unsigned char victim, unsigned char killer)
     struct player *p = &players[victim - 1];
     --alivecount;
     p->alive = false;
+#ifdef __3DS__
+    netKiller[victim - 1] = killer;
+#endif
 
 #ifdef __3DS__
     if (shake)
@@ -882,6 +886,13 @@ void clearRecents(int fromX, int toX, int fromY, int toY)
  */
 int logicGame(void)
 {
+#ifdef __3DS__
+    if (netGameRole() != NET_ROLE_NONE) {
+        int t = netGameTick();
+        if (t != NET_TICK_CONTINUE)
+            return t == NET_TICK_REDRAW;
+    }
+#endif
     Uint32 timenow = SDL_GetTicks();
     Uint32 delta = timenow - prevtime;
     prevtime = timenow;
@@ -1130,6 +1141,13 @@ void displayGame(void)
  */
 int logicGameStart(void)
 {
+#ifdef __3DS__
+    if (netGameRole() != NET_ROLE_NONE) {
+        int t = netGameTick();
+        if (t != NET_TICK_CONTINUE)
+            return t == NET_TICK_REDRAW;
+    }
+#endif
     Uint32 timenow = SDL_GetTicks();
     Uint32 delta = timenow - prevtime;
     prevtime = timenow;
@@ -1778,6 +1796,15 @@ struct menu menuMode = {
 static struct player slotBackup[MAX_PLAYERS];
 static bool slotsPacked = false;
 
+/* The rules of the local game, kept while a match with several consoles uses
+ * the host's. */
+static struct {
+    unsigned int scorecap;
+    bool holes, duelmode, weapons;
+    int gameSpeed;
+} savedRules;
+static bool netRulesSaved = false;
+
 /* The slot and the row that the cursor is on, on the lineup page, and the row on
  * the rules and options pages. */
 static int lobbySlot = 0;
@@ -1833,6 +1860,14 @@ static void restoreSlots(void)
         memcpy(players, slotBackup, sizeof(players));
         slotsPacked = false;
     }
+    if (netRulesSaved) {
+        scorecap = savedRules.scorecap;
+        holes = savedRules.holes;
+        duelmode = savedRules.duelmode;
+        weapons = savedRules.weapons;
+        gameSpeed = savedRules.gameSpeed;
+        netRulesSaved = false;
+    }
 }
 
 /* The player whose weapon is chosen on the weapon page: an index into players[]. */
@@ -1880,6 +1915,225 @@ static void startLocalGame(void)
     } else {
         curScene = &gameStart;
     }
+}
+
+/* ---- A match with several consoles ---- */
+
+/**
+ * Starts a match with `n` players. The host sends `seats` (see netgame3ds.c);
+ * every console builds the same players from them. The local setup is kept and
+ * comes back with netEndGame().
+ */
+void startNetGame(const struct netSeat *seats, int n, int role,
+                  unsigned points, bool holesRule, bool duel, int speed)
+{
+    if (!slotsPacked) {
+        memcpy(slotBackup, players, sizeof(players));
+        slotsPacked = true;
+    }
+    if (!netRulesSaved) {
+        savedRules.scorecap = scorecap;
+        savedRules.holes = holes;
+        savedRules.duelmode = duelmode;
+        savedRules.weapons = weapons;
+        savedRules.gameSpeed = gameSpeed;
+        netRulesSaved = true;
+    }
+    scorecap = points;
+    holes = holesRule;
+    duelmode = duel;
+    gameSpeed = speed;
+    weapons = false;
+
+    int remote = 0;
+    for (int k = 0; k < MAX_PLAYERS; ++k) {
+        if (k >= n) {
+            players[k] = slotBackup[k];
+            players[k].active = 0;
+            continue;
+        }
+
+        /* The local setup (buttons) is the base of every player. */
+        players[k] = slotBackup[0];
+        struct player *p = &players[k];
+        snprintf(p->name, PLAYER_NAME_LEN, "%s", seats[k].name);
+        p->color = seats[k].color;
+        p->ai = seats[k].ai;
+        p->speed = 1.0;
+        p->invertedKeys = false;
+        p->weapon = 0;
+        if (!seats[k].local && !seats[k].ai && role == NET_ROLE_HOST) {
+            /* A console far away: its buttons are set from the network. */
+            p->lkey = SDLK_F1 + 2 * remote;
+            p->rkey = SDLK_F1 + 2 * remote + 1;
+            p->wkey = SDLK_F1 + 2 * remote + 1;
+            ++remote;
+        }
+    }
+    nPlayers = n;
+    memset(netKiller, 0, sizeof(netKiller));
+
+    initPlayers2();
+    newRound();
+}
+
+int netSceneState(void)
+{
+    if (curScene == &gameStart)
+        return GS_COUNTDOWN;
+    if (curScene == &game)
+        return GS_PLAY;
+    if (curScene == &roundEndScene)
+        return GS_ROUNDEND;
+    return GS_MATCHEND;
+}
+
+int netGetFrame(struct netPlayerFrame *frames, int *cd, int *winner)
+{
+    for (int i = 0; i < nPlayers; ++i) {
+        struct player *p = &players[i];
+        frames[i].x = p->posx;
+        frames[i].y = p->posy;
+        frames[i].dir = p->dir;
+        frames[i].alive = p->alive;
+        frames[i].hole = holes && p->holecount > HOLE_SIZE;
+        frames[i].score = p->score;
+        frames[i].killer = netKiller[i];
+    }
+    *cd = countdown;
+    *winner = matchWinner;
+    return nPlayers;
+}
+
+/* A piece of trail, without the collisions: only the picture of the hitmap. */
+static void netTrail(int player, int x, int y)
+{
+    struct player *p = &players[player];
+
+    SDL_LockSurface(gameScreen);
+    for (int i = -TOLERANCE; i <= TOLERANCE; ++i) {
+        for (int j = -TOLERANCE; j <= TOLERANCE; ++j) {
+            if (abs(i) + abs(j) > TOLERANCE + 1)
+                continue;
+            int xpx = x + i;
+            int ypx = y + j;
+            if (xpx < 0 || xpx >= (int)WINDOW_W || ypx < 0
+                    || ypx >= (int)WINDOW_H)
+                continue;
+            putPixel(xpx, ypx, colors[p->color], gameScreen);
+            hitmap[sizeof(bool) * ((WINDOW_W * ypx) + xpx)] = player + 1;
+        }
+    }
+    SDL_UnlockSurface(gameScreen);
+}
+
+/* The sound, message and sparks of a crash that happened on the host. */
+static void netCrashEffect(int victim, int killer)
+{
+    struct player *p = &players[victim];
+
+    playSound(SOUND_CRASH, sound);
+    if (broadcasts) {
+        char msg[BROADC_BUF];
+        if (killer == 0)
+            snprintf(msg, BROADC_BUF, "%d; hit the wall", victim + 1);
+        else if (killer == victim + 1)
+            snprintf(msg, BROADC_BUF, "%d; committed suicide", victim + 1);
+        else
+            snprintf(msg, BROADC_BUF, "%d; crashed into ;%d", victim + 1,
+                     killer);
+        newBroadcast(msg);
+    }
+    if (shake)
+        shakeLeft = SHAKE_TIME;
+    if (particleEffects) {
+        SDL_Color color = colors[p->color];
+        addParticles(50, p->posx, p->posy, 0, 0.5, p->dir + M_PI - M_PI_4,
+                     p->dir + M_PI + M_PI_4, 1, 1, 0.0005, color.r, color.r,
+                     color.b, color.b, color.g, color.g);
+    }
+}
+
+static int netPrevGs = -1;
+
+void netApplyFrame(int gstate, int cd, int winner,
+                   const struct netPlayerFrame *f, int n)
+{
+    if (n > nPlayers)
+        n = nPlayers;
+
+    if (gstate == GS_COUNTDOWN && netPrevGs != GS_COUNTDOWN) {
+        clearSurface(gameScreen);
+        newRound();
+    }
+
+    bool refresh = false;
+    for (int i = 0; i < n; ++i) {
+        struct player *p = &players[i];
+        int x = (int)f[i].x, y = (int)f[i].y;
+
+        if (gstate != GS_COUNTDOWN && p->alive && f[i].alive && !f[i].hole) {
+            /* The trail from the last place to this one. */
+            int x0 = p->prevx, y0 = p->prevy;
+            int steps = abs(x - x0) > abs(y - y0) ? abs(x - x0) : abs(y - y0);
+            for (int s = 1; s <= steps; ++s)
+                netTrail(i, x0 + (x - x0) * s / steps,
+                         y0 + (y - y0) * s / steps);
+        }
+        if (p->alive && !f[i].alive) {
+            p->posx = f[i].x;
+            p->posy = f[i].y;
+            p->dir = f[i].dir;
+            netCrashEffect(i, f[i].killer);
+            refresh = true;
+        }
+        if (p->score != f[i].score)
+            refresh = true;
+
+        p->posx = f[i].x;
+        p->posy = f[i].y;
+        p->dir = f[i].dir;
+        p->score = f[i].score;
+        p->alive = f[i].alive;
+        p->prevx = x;
+        p->prevy = y;
+    }
+
+    alivecount = 0;
+    for (int i = 0; i < n; ++i)
+        alivecount += players[i].alive;
+    if (refresh)
+        refreshGameScreen();
+
+    switch (gstate) {
+    case GS_COUNTDOWN:
+        countdown = cd;
+        curScene = &gameStart;
+        break;
+    case GS_PLAY:
+        if (curScene != &game)
+            curScene = &game;
+        break;
+    case GS_ROUNDEND:
+        if (curScene != &roundEndScene)
+            beginRoundEnd();
+        break;
+    case GS_MATCHEND:
+        if (curScene != &matchEndScene) {
+            matchWinner = winner;
+            beginMatchEnd();
+        }
+        break;
+    }
+    netPrevGs = gstate;
+}
+
+void netEndGame(void)
+{
+    restoreSlots();
+    endRound();
+    netPrevGs = -1;
+    matchWinner = -1;
 }
 
 /**
@@ -3036,11 +3290,33 @@ void beginRoundEnd(void)
             roundWinner = i;
     }
     curScene = &roundEndScene;
+    if (netGameRole() == NET_ROLE_HOST)
+        netGameRoundEndBegin();
     displayRoundEnd();
 }
 
 int logicRoundEnd(void)
 {
+    if (netGameRole() != NET_ROLE_NONE) {
+        int t = netGameTick();
+        if (t != NET_TICK_CONTINUE)
+            return t == NET_TICK_REDRAW;
+
+        /* The host: READY, and the next round when all are ready. */
+        bool changed = false;
+        if (enterButtonDown()) {
+            clearEnterButtons();
+            netGameReadyPress();
+            changed = true;
+        }
+        if (netGameReadyComplete()) {
+            clearSurface(gameScreen);
+            newRound();
+            return 1;
+        }
+        return netGameStatusChanged() || changed;
+    }
+
     /* Only A goes on: the score is looked at as long as one likes. */
     if (enterButtonDown()) {
         clearEnterButtons();
@@ -3068,11 +3344,18 @@ void displayRoundEnd(void)
         uiText(screen, FONT_BROADCAST, "WINS THE ROUND", uiColText,
                banner.x + banner.w / 2, banner.y + 38, UI_CENTER);
 
+    if (netGameRole() != NET_ROLE_NONE) {
+        char status[32];
+        netGameStatus(status, sizeof(status));
+        uiText(screen, FONT_BROADCAST, status, uiColAccent, screen->w / 2,
+               banner.y + banner.h + 16, UI_CENTER);
+    }
+
     drawScoreBars(roundWinner, false);
     touchReset();
     SDL_Rect everywhere = {0, 0, screen->w, screen->h - 20};
     touchAdd(everywhere, 0, TOUCH_ROW);
-    struct uiHint hints[] = {{"A", "NEXT"}};
+    struct uiHint hints[] = {{"A", netGameRole() != NET_ROLE_NONE ? "READY" : "NEXT"}};
     uiHintBar(screen, hints, 1);
 
     if (presentFrame() == -1)
@@ -3091,11 +3374,35 @@ void beginMatchEnd(void)
 {
     curScene = &matchEndScene;
     menuMatch.choice = 0;
+    if (netGameRole() == NET_ROLE_HOST)
+        netGameRoundEndBegin();
     displayMatchEnd();
 }
 
 int logicMatchEnd(void)
 {
+    if (netGameRole() != NET_ROLE_NONE) {
+        int t = netGameTick();
+        if (t != NET_TICK_CONTINUE)
+            return t == NET_TICK_REDRAW;
+
+        /* The host: READY, and the same match again when all are ready. */
+        bool changed = false;
+        if (enterButtonDown()) {
+            clearEnterButtons();
+            netGameReadyPress();
+            changed = true;
+        }
+        if (netGameReadyComplete()) {
+            playSound(SOUND_ROUND_BEGIN, sound);
+            initPlayers2();
+            clearSurface(gameScreen);
+            newRound();
+            return 1;
+        }
+        return netGameStatusChanged() || changed;
+    }
+
     if (enterButtonDown()) {
         clearEnterButtons();
         if (menuMatch.choice == 0) {
@@ -3155,6 +3462,19 @@ void displayMatchEnd(void)
 
     touchReset();
     touchAdd(again, 0, TOUCH_ROW);
+    if (netGameRole() != NET_ROLE_NONE) {
+        /* Several consoles: everybody says READY for the next match. */
+        char status[32];
+        netGameStatus(status, sizeof(status));
+        uiTile(screen, again, "AGAIN", NULL, uiIconRestart, uiColGreen, true,
+               true);
+        uiText(screen, FONT_MENU, status, uiColAccent, 160, 120, UI_CENTER);
+        struct uiHint netHints[] = {{"A", "READY"}, {"B", "LOBBY"}};
+        uiHintBar(screen, netHints, netGameRole() == NET_ROLE_HOST ? 2 : 1);
+        if (presentFrame() == -1)
+            exit(1);
+        return;
+    }
     touchAdd(menu, 1, TOUCH_ROW);
     uiTile(screen, again, "AGAIN", NULL, uiIconRestart, uiColGreen,
            menuMatch.choice == 0, true);
@@ -4449,7 +4769,9 @@ int main(void)
 #ifdef __3DS__
         /* The lid was closed, or the game went to the HOME menu: pause. */
         if (platformWasSuspended()) {
-            if (curScene == &game || curScene == &gameStart)
+            if (netGameRole() != NET_ROLE_NONE)
+                ;       /* No pause with several consoles */
+            else if (curScene == &game || curScene == &gameStart)
                 pauseGame();
             else if (curScene == &resumeScene)
                 resumeLeft = 3 * RESUME_STEP;
@@ -4491,7 +4813,9 @@ int main(void)
                 bool inGame = curScene == &game || curScene == &gameStart;
                 if (event.type == SDL_JOYBUTTONDOWN
                         && k == N3DS_BUTTON_START) {
-                    if (inGame) {
+                    if (netGameRole() != NET_ROLE_NONE) {
+                        continue;       /* No pause with several consoles */
+                    } else if (inGame) {
                         pauseGame();
                         continue;
                     } else if (curScene == &pauseMenu) {
@@ -4519,6 +4843,14 @@ int main(void)
                         continue;
                     if (curScene == &pauseMenu) {
                         resumeGame();
+                        continue;
+                    }
+                    /* After a match with several consoles the host can send
+                     * everybody back to the lobby. */
+                    if (curScene == &matchEndScene
+                            && netGameRole() == NET_ROLE_HOST) {
+                        netGameToLobby();
+                        curScene->displayFunc();
                         continue;
                     }
                     /* The only way out of the game is the EXIT tile. */

@@ -127,6 +127,10 @@ static Uint32 prevtime = 0;
 static unsigned int alivecount = 0;
 static int countdown;
 static bool winnerDeclared = false;
+#ifdef __3DS__
+/* Who or what crashed each player last (0: the wall), for the other consoles. */
+static unsigned char netKiller[MAX_PLAYERS];
+#endif
 
 /* SURFACES */
 static SDL_Surface *msg = NULL;

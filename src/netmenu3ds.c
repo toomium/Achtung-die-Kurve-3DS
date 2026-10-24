@@ -10,6 +10,8 @@
 #include "gfx.h"
 #include "input.h"
 #include "net.h"
+#include "netgame3ds.h"
+#include "netproto3ds.h"
 #include "player.h"
 #include "sound.h"
 #include "touch3ds.h"
@@ -271,27 +273,7 @@ static void touchBrowse(int id, int value, bool released)
 
 /* ---- The group: lobby, rules, ready ---- */
 
-/* What the group knows about each node (index node - 1). The host decides, the
- * clients show what the host sends. */
-struct member {
-    unsigned char used;
-    unsigned char color;
-    unsigned char ready;
-    char name[PLAYER_NAME_LEN];
-};
-
-/* What the host chooses for the match. */
-struct netRules {
-    unsigned short points;      /* 0: no limit */
-    unsigned char holes;
-    unsigned char duel;
-    unsigned char speed;        /* Index into speedChoices */
-    unsigned char ai;           /* Computer players added to the humans */
-};
-
-enum { PH_LOBBY, PH_RULES, PH_READY };
-
-enum { MSG_PROFILE = 1, MSG_STATE = 2, MSG_READY = 3, MSG_ABORT = 4 };
+enum { PH_LOBBY, PH_RULES, PH_READY, PH_GAME };
 
 /* A client tells the host how it wants to appear. */
 struct msgProfile {
@@ -305,7 +287,6 @@ struct msgProfile {
 struct msgState {
     unsigned char type;
     unsigned char phase;
-    unsigned char beginCount;   /* Counts up when a match is started */
     unsigned short readyLeft;   /* Milliseconds of the READY phase that are left */
     struct netRules rules;
     struct member members[NET_MAX_NODES];
@@ -313,12 +294,10 @@ struct msgState {
 
 #define RESEND_MS    1000
 #define READY_MS     30000
-#define NOTICE_MS    3500
 
 static const unsigned pointChoices[] = {10, 20, 30, 40, 50, 100, 0};
 #define N_POINTS ((int)(sizeof(pointChoices) / sizeof(pointChoices[0])))
-static const int speedChoices[] = {75, 100, 125, 150};
-#define N_SPEEDS ((int)(sizeof(speedChoices) / sizeof(speedChoices[0])))
+const int speedChoices[N_SPEEDS] = {75, 100, 125, 150};
 
 enum { ROW_NAME, ROW_COLOR, ROW_LEFT, ROW_RIGHT, ROW_START, N_ROWS };
 enum { RULE_POINTS, RULE_HOLES, RULE_DUEL, RULE_SPEED, RULE_AI, RULE_GO,
@@ -328,7 +307,6 @@ enum { RULE_POINTS, RULE_HOLES, RULE_DUEL, RULE_SPEED, RULE_AI, RULE_GO,
 static struct member members[NET_MAX_NODES];
 static struct netRules rules;
 static int phase = PH_LOBBY;
-static unsigned char beginCount = 0;
 static unsigned lobbyMask = 0;
 static unsigned lockedMask = 0;         /* Who was there when the rules began */
 static bool lobbyFresh = true;
@@ -342,7 +320,6 @@ static bool wantReady = false;
 static Uint32 readyDeadline = 0;        /* Host: when the READY phase ends */
 static unsigned readyLeftAtRecv = 0;    /* Client: what the host said, and when */
 static Uint32 readyRecvTime = 0;
-static Uint32 noticeUntil = 0;
 static int shownSeconds = -1;
 
 /* In zatackax.c: widgets of the rules page. */
@@ -432,7 +409,6 @@ static void sendState(void)
     memset(&msg, 0, sizeof(msg));
     msg.type = MSG_STATE;
     msg.phase = phase;
-    msg.beginCount = beginCount;
     msg.readyLeft = phase == PH_READY ? readyRemaining() : 0;
     msg.rules = rules;
     memcpy(msg.members, members, sizeof(members));
@@ -543,22 +519,33 @@ static void cancelToLobby(void)
     setPhase(PH_LOBBY);
 }
 
-/* The READY phase is over: everybody is ready, or the time has run out. */
+/* The READY phase is over: everybody is ready, or the time has run out. The
+ * match begins. */
 static void beginMatch(void)
 {
-    netLockJoining(false);
     for (int i = 0; i < NET_MAX_NODES; ++i)
         members[i].ready = 0;
-    ++beginCount;
-    noticeUntil = SDL_GetTicks() + NOTICE_MS;
-    setPhase(PH_LOBBY);
-    enterScene(&lobbyScene);
+    setPhase(PH_GAME);
+    sendState();
+    lobbyDirty = false;
+    lastSend = SDL_GetTicks();
     playSound(SOUND_ROUND_BEGIN, sound);
+    netGameBegin(members, &rules, netMyNode(), true, lockedMask);
+}
+
+/* Client: the host began the match. */
+static void startClientGame(void)
+{
+    phase = PH_GAME;
+    playSound(SOUND_ROUND_BEGIN, sound);
+    netGameBegin(members, &rules, netMyNode(), false, 0);
 }
 
 /* Client: the host's phase decides which page is shown. */
 static void followHost(void)
 {
+    if (phase == PH_GAME)
+        return;
     struct scene *target = phase == PH_RULES ? &waitScene
         : phase == PH_READY ? &readyScene : &lobbyScene;
     if (curScene == target)
@@ -608,13 +595,17 @@ static bool receiveMessages(void)
                 rules = msg.rules;
                 readyLeftAtRecv = msg.readyLeft;
                 readyRecvTime = SDL_GetTicks();
-                if (msg.beginCount != beginCount) {
-                    beginCount = msg.beginCount;
-                    noticeUntil = SDL_GetTicks() + NOTICE_MS;
-                    playSound(SOUND_ROUND_BEGIN, sound);
-                    changed = true;
-                }
                 phase = msg.phase;
+                if (phase == PH_GAME) {
+                    startClientGame();
+                    return true;
+                }
+            } else if (buf[0] == MSG_SNAP && phase != PH_GAME
+                       && (phase == PH_READY || phase == PH_RULES)) {
+                /* The first snapshot: the host has begun (the message that
+                 * said so may have got lost). */
+                startClientGame();
+                return true;
             } else if (buf[0] == MSG_ABORT) {
                 goToChoice("A PLAYER LEFT");
                 return true;
@@ -758,11 +749,6 @@ static int logicLobby(void)
     if (curScene != &lobbyScene)
         return 1;
 
-    if (noticeUntil != 0 && SDL_GetTicks() >= noticeUntil) {
-        noticeUntil = 0;
-        changed = true;
-    }
-
     if (enterButtonDown()) {
         clearEnterButtons();
         lobbyActivate();
@@ -899,15 +885,9 @@ static void displayLobby(void)
     }
 
     char line[48];
-    if (noticeUntil != 0) {
-        snprintf(line, sizeof(line), "ALL READY! THE GAME COMES NEXT");
-        uiText(screen, FONT_BROADCAST, line, uiColGreen, 160, 148, UI_CENTER);
-    } else {
-        snprintf(line, sizeof(line), "%d / %d  %s", memberCount(),
-                 NET_MAX_NODES,
-                 netIsHost() ? "PLAYERS" : "WAITING FOR THE HOST");
-        uiText(screen, FONT_BROADCAST, line, uiColDim, 160, 148, UI_CENTER);
-    }
+    snprintf(line, sizeof(line), "%d / %d  %s", memberCount(), NET_MAX_NODES,
+             netIsHost() ? "PLAYERS" : "WAITING FOR THE HOST");
+    uiText(screen, FONT_BROADCAST, line, uiColDim, 160, 148, UI_CENTER);
 
     if (netIsHost()) {
         SDL_Rect go = {16, 168, 288, 34};
@@ -995,6 +975,11 @@ static void rulesGo(void)
     if (rules.ai + memberCount() < MIN_PLAYERS) {
         playSound(SOUND_BEP, sound);
         message = "NEED AT LEAST TWO PLAYERS";
+        return;
+    }
+    if (rules.duel && rules.ai + memberCount() != 2) {
+        playSound(SOUND_BEP, sound);
+        message = "DUEL NEEDS EXACTLY TWO";
         return;
     }
     message = NULL;
@@ -1246,6 +1231,39 @@ static void leaveReady(void)
         leaveLobby();
 }
 
+/* ---- From the match back to the group ---- */
+
+void netLobbyResume(void)
+{
+    netGameStop();
+    phase = PH_LOBBY;
+    wantReady = false;
+    for (int i = 0; i < NET_MAX_NODES; ++i)
+        members[i].ready = 0;
+    if (netIsHost())
+        netLockJoining(false);
+    lobbyMask = netNodeMask();
+    lobbyDirty = true;
+    lastSend = 0;
+    lobbyFresh = false;
+    lobbyRow = 0;
+    enterScene(&lobbyScene);
+    lobbyScene.parentScene = &choiceScene;
+}
+
+void netMenuAbort(const char *why, bool tellOthers)
+{
+    if (tellOthers && netIsHost()) {
+        unsigned char msg = MSG_ABORT;
+        for (int i = 0; i < 3; ++i) {
+            netSend(NET_ALL_NODES, &msg, sizeof(msg));
+            SDL_Delay(60);
+        }
+    }
+    netGameStop();
+    goToChoice(why);
+}
+
 /* ---- Setup ---- */
 
 void netMenuEnter(struct scene *parent)
@@ -1267,8 +1285,6 @@ void netMenuEnter(struct scene *parent)
     choiceSel = 0;
     lobbyFresh = true;
     lobbyMask = 0;
-    noticeUntil = 0;
-    beginCount = 0;
     if (!netInit()) {
         fprintf(stderr, "net: init failed 0x%08x\n", netLastError());
         message = "NETWORK NOT AVAILABLE";
