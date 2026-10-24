@@ -17,6 +17,7 @@
 
 /* In zatackax.c: the logo over the animation, on the top screen. */
 void drawTitleScreen(void);
+void animTitle(void);
 
 #define MAX_LISTED  6           /* Groups shown in the list */
 #define TOUCH_REFRESH 100
@@ -415,9 +416,9 @@ static void touchLobby(int id, int value, bool released)
 void netMenuEnter(struct scene *parent)
 {
     choiceScene = (struct scene){logicChoice, displayChoice, parent,
-                                 touchChoice, NULL, leaveChoice};
+                                 touchChoice, animTitle, leaveChoice};
     browseScene = (struct scene){logicBrowse, displayBrowse, &choiceScene,
-                                 touchBrowse, NULL, NULL};
+                                 touchBrowse, animTitle, NULL};
     lobbyScene = (struct scene){logicLobby, displayLobby, &choiceScene,
                                 touchLobby, NULL, leaveLobby};
 
