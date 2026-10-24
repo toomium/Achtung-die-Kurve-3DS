@@ -21,6 +21,7 @@
 #include "platform.h"
 #include "ui3ds.h"
 #include "touch3ds.h"
+#include "netmenu3ds.h"
 #include "demo3ds.h"
 #endif
 
@@ -1674,7 +1675,7 @@ void initMainMenu(void)
  * Draws the top screen of the title and the first menus: the animation, and the
  * logo over it.
  */
-static void drawTitleScreen(void)
+void drawTitleScreen(void)
 {
     SDL_Surface *logo = images[IMG_LOGO];
 
@@ -1972,7 +1973,8 @@ int logicModeMenu(void)
             lobbyRow = 0;
             curScene = &lobbyMenu;
         } else {
-            playSound(SOUND_BEP, sound);
+            playSound(SOUND_BEEP, sound);
+            netMenuEnter(&modeMenu);
         }
         return 1;
     }
@@ -1994,8 +1996,8 @@ void displayModeMenu(void)
 
     uiTile(screen, one, "ONE CONSOLE", NULL, uiIconOneConsole, uiColGreen,
            menuMode.choice == 0, true);
-    uiTile(screen, many, "MULTIPLAYER", "COMING SOON", uiIconManyConsoles,
-           uiColBlue, menuMode.choice == 1, false);
+    uiTile(screen, many, "MULTIPLAYER", NULL, uiIconManyConsoles,
+           uiColBlue, menuMode.choice == 1, true);
 
     struct uiHint hints[] = {{"A", "OK"}, {"B", "BACK"}};
     uiHintBar(screen, hints, 2);
@@ -4555,6 +4557,8 @@ int main(void)
                     else if (curScene->parentScene == NULL)
                         exitGame(0);
                     playSound(SOUND_BEP, sound);
+                    if (curScene->leaveFunc != NULL)
+                        curScene->leaveFunc();
                     curScene = curScene->parentScene;
                     curScene->displayFunc();
                 }

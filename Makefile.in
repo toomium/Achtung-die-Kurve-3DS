@@ -319,7 +319,7 @@ target_alias = @target_alias@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
-zatackax_SOURCES = src/ai.c src/ai.h src/broadcast.c src/broadcast.h src/common.h src/config.c src/config.h src/data.c src/data.h src/error.c src/error.h src/font.c src/font.h src/gfx.c src/gfx.h src/input.c src/input.h src/particle.c src/particle.h src/player.h src/sound.c src/sound.h src/video.c src/video.h src/weapon.c src/weapon.h src/zatackax.c src/zatackax.h
+zatackax_SOURCES = src/ai.c src/ai.h src/broadcast.c src/broadcast.h src/common.h src/config.c src/config.h src/data.c src/data.h src/error.c src/error.h src/font.c src/font.h src/gfx.c src/gfx.h src/input.c src/input.h src/particle.c src/particle.h src/player.h src/scene.h src/sound.c src/sound.h src/video.c src/video.h src/weapon.c src/weapon.h src/zatackax.c src/zatackax.h
 AM_CPPFLAGS = -DDATADIR=\"$(pkgdatadir)\"
 EXTRA_DIST = data AUTHORS.md NEWS.md README.md
 desktopdir = $(datadir)/applications
