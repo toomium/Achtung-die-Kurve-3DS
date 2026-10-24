@@ -10,6 +10,7 @@
 #include "gfx.h"
 #include "input.h"
 #include "net.h"
+#include "player.h"
 #include "sound.h"
 #include "touch3ds.h"
 #include "ui3ds.h"
@@ -18,6 +19,8 @@
 /* In zatackax.c: the logo over the animation, on the top screen. */
 void drawTitleScreen(void);
 void animTitle(void);
+void setNextName(unsigned char pedit);
+void setNextKey(unsigned char pedit, unsigned char key);
 
 #define MAX_LISTED  6           /* Groups shown in the list */
 #define TOUCH_REFRESH 100
@@ -265,22 +268,221 @@ static void touchBrowse(int id, int value, bool released)
 
 /* ---- The lobby ---- */
 
-#define NAME_LEN (NET_NAME_MAX * 4 + 1)
+/* What the lobby knows about each node (index node - 1). The host decides, the
+ * clients show what the host sends. */
+struct member {
+    unsigned char used;
+    unsigned char color;
+    char name[PLAYER_NAME_LEN];
+};
 
+enum { MSG_PROFILE = 1, MSG_LOBBY = 2 };
+
+/* A client tells the host how it wants to appear. */
+struct msgProfile {
+    unsigned char type;
+    unsigned char color;
+    char name[PLAYER_NAME_LEN];
+};
+
+/* The host tells everyone who is in the group. Sent whenever something changes
+ * and now and then anyway, so a lost message does no harm. */
+struct msgLobby {
+    unsigned char type;
+    struct member members[NET_MAX_NODES];
+};
+
+#define RESEND_MS 1000
+
+enum { ROW_NAME, ROW_COLOR, ROW_LEFT, ROW_RIGHT, N_ROWS };
+#define TOUCH_SWATCH 10
+
+static struct member members[NET_MAX_NODES];
 static unsigned lobbyMask = 0;
-static char names[NET_MAX_NODES][NAME_LEN];
-static unsigned lastNameTry = 0;
 static bool lobbyFresh = true;
+static bool lobbyDirty = false;         /* Something to send to the others */
+static Uint32 lastSend = 0;
+static int lobbyRow = 0;
+static int wantColor = 0;               /* The color this console asks for */
+static int colorCursor = 0;
 
-static void refreshMembers(void)
+/* The profile of this console: name and buttons are those of slot 1. */
+static struct player *me(void)
 {
-    lobbyMask = netNodeMask();
+    return &players[0];
+}
+
+static bool colorTaken(int color, int exceptNode)
+{
     for (int n = 1; n <= NET_MAX_NODES; ++n) {
-        names[n - 1][0] = '\0';
-        if (lobbyMask & (1u << (n - 1)))
-            netNodeName(n, names[n - 1], NAME_LEN);
+        if (n != exceptNode && members[n - 1].used
+                && members[n - 1].color == color)
+            return true;
     }
-    lastNameTry = SDL_GetTicks();
+    return false;
+}
+
+static int freeColor(void)
+{
+    for (int c = 0; c < N_COLORS; ++c) {
+        if (!colorTaken(c, 0))
+            return c;
+    }
+    return 0;
+}
+
+/* Host: takes over a node's profile. A color that someone else has is refused
+ * (the node keeps its old one). */
+static void applyProfile(int node, int color, const char *name)
+{
+    struct member *m = &members[node - 1];
+
+    if (color >= 0 && color < N_COLORS && !colorTaken(color, node))
+        m->color = color;
+    if (name != NULL && strncmp(m->name, name, PLAYER_NAME_LEN - 1) != 0) {
+        snprintf(m->name, sizeof(m->name), "%s", name);
+    }
+    m->used = 1;
+    lobbyDirty = true;
+}
+
+/* Host: who is in the group has changed. */
+static void hostMembers(void)
+{
+    unsigned mask = netNodeMask();
+    for (int n = 1; n <= NET_MAX_NODES; ++n) {
+        struct member *m = &members[n - 1];
+        bool present = (mask >> (n - 1)) & 1;
+        if (present && !m->used) {
+            m->used = 1;
+            m->color = freeColor();
+            netNodeName(n, m->name, sizeof(m->name));
+            lobbyDirty = true;
+        } else if (!present && m->used) {
+            memset(m, 0, sizeof(*m));
+            lobbyDirty = true;
+        }
+    }
+}
+
+static void sendLobby(void)
+{
+    struct msgLobby msg;
+    msg.type = MSG_LOBBY;
+    memcpy(msg.members, members, sizeof(members));
+    netSend(NET_ALL_NODES, &msg, sizeof(msg));
+}
+
+static void sendProfile(void)
+{
+    struct msgProfile msg;
+    memset(&msg, 0, sizeof(msg));
+    msg.type = MSG_PROFILE;
+    msg.color = wantColor;
+    strncpy(msg.name, me()->name, PLAYER_NAME_LEN - 1);
+    netSend(NET_HOST_NODE, &msg, sizeof(msg));
+}
+
+/* This console changed its profile: the host applies it, a client sends it. */
+static void profileChanged(void)
+{
+    if (netIsHost()) {
+        applyProfile(NET_HOST_NODE, wantColor, me()->name);
+        wantColor = members[NET_HOST_NODE - 1].color;
+    } else {
+        sendProfile();
+        lastSend = SDL_GetTicks();
+    }
+}
+
+static void initLobby(void)
+{
+    lobbyFresh = false;
+    lobbyDirty = false;
+    lobbyRow = 0;
+    memset(members, 0, sizeof(members));
+    wantColor = me()->color % N_COLORS;
+    colorCursor = wantColor;
+    lastSend = 0;
+    if (netIsHost()) {
+        hostMembers();
+        profileChanged();
+    } else {
+        sendProfile();
+    }
+}
+
+/* Handles the messages that came in. Returns true if the lobby changed. */
+static bool receiveLobby(void)
+{
+    unsigned char buf[NET_MAX_PACKET];
+    bool changed = false;
+    int from = 0;
+    size_t len;
+
+    while ((len = netRecv(buf, sizeof(buf), &from)) > 0) {
+        if (netIsHost() && buf[0] == MSG_PROFILE && len >= sizeof(struct msgProfile)
+                && from >= 1 && from <= NET_MAX_NODES) {
+            struct msgProfile msg;
+            memcpy(&msg, buf, sizeof(msg));
+            msg.name[PLAYER_NAME_LEN - 1] = '\0';
+            if (members[from - 1].used) {
+                struct member before = members[from - 1];
+                applyProfile(from, msg.color, msg.name);
+                changed |= memcmp(&before, &members[from - 1],
+                                  sizeof(before)) != 0;
+            }
+        } else if (!netIsHost() && buf[0] == MSG_LOBBY
+                   && len >= sizeof(struct msgLobby) && from == NET_HOST_NODE) {
+            struct msgLobby msg;
+            memcpy(&msg, buf, sizeof(msg));
+            if (memcmp(msg.members, members, sizeof(members)) != 0) {
+                memcpy(members, msg.members, sizeof(members));
+                changed = true;
+            }
+        }
+    }
+    return changed;
+}
+
+static void requestColor(int color)
+{
+    int node = netMyNode();
+    if (node < 1 || node > NET_MAX_NODES)
+        return;
+    if (color == wantColor && members[node - 1].color == color)
+        return;
+    if (colorTaken(color, node)) {
+        playSound(SOUND_BEP, sound);
+        return;
+    }
+    playSound(SOUND_BEEP, sound);
+    wantColor = color;
+    profileChanged();
+}
+
+static void lobbyActivate(void)
+{
+    switch (lobbyRow) {
+    case ROW_NAME:
+        playSound(SOUND_BEEP, sound);
+        setNextName(0);
+        profileChanged();
+        break;
+    case ROW_COLOR:
+        requestColor(colorCursor);
+        break;
+    case ROW_LEFT:
+    case ROW_RIGHT:
+        playSound(SOUND_BEEP, sound);
+        if (lobbyRow == ROW_LEFT)
+            me()->lkey = SDLK_CLEAR;
+        else
+            me()->rkey = SDLK_CLEAR;
+        lobbyScene.displayFunc();       /* Show that a button is awaited */
+        setNextKey(0, lobbyRow == ROW_LEFT ? 'l' : 'r');
+        break;
+    }
 }
 
 static int logicLobby(void)
@@ -288,68 +490,96 @@ static int logicLobby(void)
     if (!netConnected()) {
         netLeave();
         lobbyFresh = true;
-        message = netIsHost() ? NULL : "CONNECTION LOST";
+        message = "CONNECTION LOST";
         playSound(SOUND_BEP, sound);
         curScene = &choiceScene;
         return 1;
     }
 
+    bool changed = false;
     if (lobbyFresh) {
-        lobbyFresh = false;
-        refreshMembers();
+        initLobby();
+        changed = true;
+    }
+
+    changed |= receiveLobby();
+
+    if (netIsHost()) {
+        unsigned mask = netNodeMask();
+        if (mask != lobbyMask) {
+            lobbyMask = mask;
+            hostMembers();
+            playSound(SOUND_BEEP, sound);
+            changed = true;
+        }
+        if (lobbyDirty || SDL_GetTicks() - lastSend > RESEND_MS) {
+            sendLobby();
+            lobbyDirty = false;
+            lastSend = SDL_GetTicks();
+        }
+    } else {
+        lobbyMask = netNodeMask();
+        if (SDL_GetTicks() - lastSend > RESEND_MS) {
+            sendProfile();
+            lastSend = SDL_GetTicks();
+        }
+    }
+
+    if (enterButtonDown()) {
+        clearEnterButtons();
+        lobbyActivate();
         return 1;
     }
 
-    if (netNodeMask() != lobbyMask) {
-        refreshMembers();
+    int oldRow = lobbyRow, oldCursor = colorCursor;
+    if (menuButtonQuery(KEY_DOWN) && lobbyRow < N_ROWS - 1)
+        ++lobbyRow;
+    else if (menuButtonQuery(KEY_UP) && lobbyRow > 0)
+        --lobbyRow;
+    else if (lobbyRow == ROW_COLOR && menuButtonQuery(KEY_RIGHT))
+        colorCursor = (colorCursor + 1) % N_COLORS;
+    else if (lobbyRow == ROW_COLOR && menuButtonQuery(KEY_LEFT))
+        colorCursor = (colorCursor + N_COLORS - 1) % N_COLORS;
+    if (lobbyRow != oldRow || colorCursor != oldCursor) {
         playSound(SOUND_BEEP, sound);
-        return 1;
+        changed = true;
     }
-
-    /* A new member's name may arrive a moment after it joined. */
-    bool missing = false;
-    for (int n = 0; n < NET_MAX_NODES; ++n) {
-        if ((lobbyMask & (1u << n)) && names[n][0] == '\0')
-            missing = true;
-    }
-    if (missing && SDL_GetTicks() - lastNameTry > 500) {
-        refreshMembers();
-        return 1;
-    }
-    return 0;
+    return changed;
 }
 
 static void leaveLobby(void)
 {
     netLeave();
     lobbyFresh = true;
+    lobbyMask = 0;
     message = NULL;
 }
 
 static void drawLobbyTop(void)
 {
     const int w = 88, h = 100, gap = 8, x0 = 12, y0 = 14;
-    int me = netMyNode();
+    int mine = netMyNode();
     int slot = 0;
 
     useTopView();
     clearBackground(screen);
 
     for (int n = 1; n <= NET_MAX_NODES; ++n) {
-        if (!(lobbyMask & (1u << (n - 1))))
+        const struct member *m = &members[n - 1];
+        if (!m->used)
             continue;
 
-        SDL_Color c = colors[slot % N_COLORS];
+        SDL_Color c = colors[m->color % N_COLORS];
         SDL_Rect cell = {x0 + (slot % 4) * (w + gap),
                          y0 + (slot / 4) * (h + gap), w, h};
         cell = uiCard(screen, cell, uiColPanel,
-                      n == me ? uiColAccent : uiMix(uiColPanel, c, 55),
-                      n == me);
+                      n == mine ? uiColAccent : uiMix(uiColPanel, c, 55),
+                      n == mine);
         int cx = cell.x + w / 2;
         uiBall(screen, cx, cell.y + 34, 8, 2, c);
 
         char name[11];
-        snprintf(name, sizeof(name), "%s", names[n - 1]);
+        snprintf(name, sizeof(name), "%s", m->name);
         uiText(screen, FONT_BROADCAST, name[0] != '\0' ? name : "...", c, cx,
                cell.y + 60, UI_CENTER);
         uiText(screen, FONT_MENU, n == NET_HOST_NODE ? "HOST" : "",
@@ -368,6 +598,19 @@ static void drawLobbyTop(void)
     }
 }
 
+/* A row of the profile: a panel with a label; the caller draws the value. */
+static SDL_Rect profileRow(int y, int h, int row, const char *label)
+{
+    SDL_Rect r = {16, y, 288, h};
+    bool focused = row == lobbyRow;
+    touchAdd(r, row, TOUCH_ROW);
+    uiPanel(screen, r, uiColPanel,
+            focused ? uiColAccent : uiMix(uiColPanel, uiColDim, 50));
+    uiText(screen, FONT_BROADCAST, label, uiColDim, r.x + 10,
+           r.y + (h - 8) / 2, UI_LEFT);
+    return r;
+}
+
 static void displayLobby(void)
 {
     drawLobbyTop();
@@ -376,29 +619,50 @@ static void displayLobby(void)
     clearBackground(screen);
     touchReset();
 
-    int members = 0;
-    for (int n = 0; n < NET_MAX_NODES; ++n)
-        members += (lobbyMask >> n) & 1;
+    int mine = netMyNode();
+    int shownColor = mine >= 1 && mine <= NET_MAX_NODES && members[mine - 1].used
+        ? members[mine - 1].color : wantColor;
 
-    uiText(screen, FONT_MENU, netIsHost() ? "YOUR GROUP" : "GROUP", uiColBlue,
-           16, 8, UI_LEFT);
+    SDL_Rect r = profileRow(8, 26, ROW_NAME, "NAME");
+    uiText(screen, FONT_MENU, me()->name, colors[shownColor % N_COLORS],
+           r.x + r.w - 10, r.y + 5, UI_RIGHT);
 
-    char line[32];
-    snprintf(line, sizeof(line), "PLAYERS  %d / %d", members, NET_MAX_NODES);
-    uiText(screen, FONT_MENU, line, uiColText, 16, 50, UI_LEFT);
-
-    int me = netMyNode();
-    if (me >= 1 && me <= NET_MAX_NODES && names[me - 1][0] != '\0') {
-        snprintf(line, sizeof(line), "YOU  %s", names[me - 1]);
-        uiText(screen, FONT_MENU, line, uiColDim, 16, 80, UI_LEFT);
+    /* The colors in a row. Those of the others are dimmed. */
+    r = profileRow(40, 36, ROW_COLOR, "COLOR");
+    const int sw = 24, sgap = 3;
+    int x0 = r.x + r.w - 10 - (N_COLORS * sw + (N_COLORS - 1) * sgap);
+    for (int i = 0; i < N_COLORS; ++i) {
+        SDL_Rect s = {x0 + i * (sw + sgap), r.y + 6, sw, sw};
+        bool taken = colorTaken(i, mine);
+        bool cursor = lobbyRow == ROW_COLOR && i == colorCursor;
+        SDL_Color c = colors[i];
+        touchAdd(s, TOUCH_SWATCH + i, 0);
+        uiPanel(screen, s, taken ? uiMix(uiColPanel, c, 25) : c,
+                i == shownColor ? uiColText
+                : cursor ? uiColAccent : uiMix(uiColPanel, c, 50));
     }
 
-    uiText(screen, FONT_BROADCAST,
-           netIsHost() ? "WAITING FOR PLAYERS..." : "WAITING FOR THE HOST...",
-           uiColDim, 16, 120, UI_LEFT);
+    for (int row = ROW_LEFT; row <= ROW_RIGHT; ++row) {
+        bool left = row == ROW_LEFT;
+        r = profileRow(row == ROW_LEFT ? 80 : 110, 26, row,
+                       left ? "LEFT" : "RIGHT");
+        char *text = buttonName(left ? me()->lkey : me()->rkey);
+        uiText(screen, FONT_MENU, text[0] != '\0' ? text : "...", uiColText,
+               r.x + r.w - 10, r.y + 5, UI_RIGHT);
+        free(text);
+    }
 
-    struct uiHint hints[] = {{"B", "LEAVE"}};
-    uiHintBar(screen, hints, 1);
+    int members_n = 0;
+    for (int n = 0; n < NET_MAX_NODES; ++n)
+        members_n += members[n].used;
+    char line[40];
+    snprintf(line, sizeof(line), "%d / %d  %s", members_n, NET_MAX_NODES,
+             netIsHost() ? "WAITING FOR PLAYERS" : "WAITING FOR THE HOST");
+    uiText(screen, FONT_BROADCAST, line, uiColDim, 160, 150, UI_CENTER);
+
+    struct uiHint hints[] = {{"A", lobbyRow == ROW_COLOR ? "PICK" : "CHANGE", 6},
+                             {"B", "LEAVE"}};
+    uiHintBar(screen, hints, 2);
 
     if (presentFrame() == -1)
         exit(1);
@@ -406,9 +670,17 @@ static void displayLobby(void)
 
 static void touchLobby(int id, int value, bool released)
 {
-    (void)id;
     (void)value;
-    (void)released;
+    if (id >= TOUCH_SWATCH) {
+        lobbyRow = ROW_COLOR;
+        colorCursor = id - TOUCH_SWATCH;
+        if (released)
+            requestColor(colorCursor);
+    } else if (!released) {
+        lobbyRow = id;
+    } else {
+        touchPressA();
+    }
 }
 
 /* ---- Setup ---- */
@@ -425,6 +697,7 @@ void netMenuEnter(struct scene *parent)
     message = NULL;
     choiceSel = 0;
     lobbyFresh = true;
+    lobbyMask = 0;
     if (!netInit()) {
         fprintf(stderr, "net: init failed 0x%08x\n", netLastError());
         message = "NETWORK NOT AVAILABLE";
