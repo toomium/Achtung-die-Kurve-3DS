@@ -220,7 +220,9 @@ size_t netRecv(void *buf, size_t size, int *from)
     size_t got = 0;
     u16 src = 0;
 
-    if (!inGroup || !udsWaitDataAvailable(&udsBinding, false, false))
+    /* No look at the data event first: it is consumed by the first message, and
+     * there may be more waiting. An empty buffer gives a size of 0. */
+    if (!inGroup)
         return 0;
     if (failed(udsPullPacket(&udsBinding, buf, size, &got, &src)))
         return 0;

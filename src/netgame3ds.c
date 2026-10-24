@@ -312,6 +312,9 @@ static int hostTick(Uint32 now)
 
 /* ---- Client ---- */
 
+/* For the debug log: how many snapshots came in, and how many frames used one. */
+static unsigned statStart = 0, statSnaps = 0, statFrames = 0, statLate = 0;
+
 static int clientTick(Uint32 now)
 {
     unsigned char buf[NET_MAX_PACKET];
@@ -329,6 +332,9 @@ static int clientTick(Uint32 now)
             /* Only newer snapshots count (the number wraps around). */
             if (haveSeq && (short)(msg.seq - lastSeq) <= 0)
                 continue;
+            if (haveSeq && (unsigned short)(msg.seq - lastSeq) > 1)
+                statLate += (unsigned short)(msg.seq - lastSeq) - 1;
+            ++statSnaps;
             haveSeq = true;
             lastSeq = msg.seq;
             latest = msg;
@@ -340,6 +346,14 @@ static int clientTick(Uint32 now)
             netLobbyResume();
             return NET_TICK_REDRAW;
         }
+    }
+
+    ++statFrames;
+    if (now - statStart >= 2000) {
+        fprintf(stderr, "net client: %u snapshots, %u missing, %u frames in %u ms\n",
+                statSnaps, statLate, statFrames, now - statStart);
+        statStart = now;
+        statSnaps = statLate = statFrames = 0;
     }
 
     bool redraw = false;
