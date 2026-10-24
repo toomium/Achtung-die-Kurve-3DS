@@ -33,6 +33,18 @@ int clearSurface(SDL_Surface *s)
 }
 
 /**
+ * Fill a surface with the background color. Not for the trail and particle
+ * surfaces, they use black as their transparent color (clearSurface).
+ *
+ * Return 0 on success, -1 on error.
+ */
+int clearBackground(SDL_Surface *s)
+{
+    Uint32 color = SDL_MapRGB(s->format, BG_R, BG_G, BG_B);
+    return SDL_FillRect(s, &s->clip_rect, color);
+}
+
+/**
  * Load an icon file named `filename`. Return the loaded image, or
  * NULL if it wasn't loaded.
  */

@@ -9,6 +9,11 @@
 #include <sys/stat.h>
 
 #include "common.h"
+
+#ifdef __3DS__
+#define CONFIG_DIR_3DS "sdmc:/3ds/zatackax"
+#define SETTINGS_FILE_SIZE 1024
+#endif
 #include "player.h"
 
 #define DEFAULT_FULLSCREEN       false
@@ -20,9 +25,11 @@
 #define DEFAULT_PARTICLE_EFFECTS true
 #define DEFAULT_BORDER           false
 #define DEFAULT_DUELMODE         false
+#define DEFAULT_SHAKE            true
 #define DEFAULT_SCORECAP         0
 
 extern unsigned int scorecap;
+extern int gameSpeed;      /* Percent, 100 is the normal speed */
 extern bool fullscreen;
 extern bool sound;
 extern bool music;
@@ -32,6 +39,8 @@ extern bool broadcasts;
 extern bool particleEffects;
 extern bool border;
 extern bool duelmode;
+extern bool debugLog;      /* Write sdmc:/zatackax.log (3DS), set in settings.cfg only */
+extern bool shake;         /* The playfield shakes when somebody crashes (3DS) */
 
 int ensureConfigPath(void);
 char *getConfigFile(void);

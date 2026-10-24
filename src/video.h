@@ -33,4 +33,26 @@ extern bool screenFreeze;
 
 int initScreen(void);
 
+/*
+ * Show the finished frame. On the 3DS the game draws into two views (top and
+ * bottom screen) which are combined here; elsewhere it is SDL_Flip(screen).
+ * Returns -1 on error.
+ */
+int presentFrame(void);
+
+/*
+ * Select the surface that `screen` points to, i.e. the one the current scene
+ * draws into. Only meaningful on the 3DS.
+ */
+#ifdef __3DS__
+/* The bottom screen: menus, scores and messages. */
+extern SDL_Surface *bottomView;
+
+void useTopView(void);
+void useBottomView(void);
+#else
+#define useTopView() ((void)0)
+#define useBottomView() ((void)0)
+#endif
+
 #endif

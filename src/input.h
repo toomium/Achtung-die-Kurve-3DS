@@ -20,6 +20,24 @@ extern bool joyButtonDown[MAX_PLAYERS][128];
  */
 typedef unsigned int button;
 
+/* The button for joystick button number `n` on joystick `joy`. */
+#define JOY_BUTTON(joy, n) ((((joy) + 1) << 9) | (n))
+
+#ifdef __3DS__
+/* Button numbers of the 3DS joypad, as numbered by SDL. */
+enum n3dsButton
+{
+    N3DS_BUTTON_START = 0,
+    N3DS_BUTTON_A = 1,
+    N3DS_BUTTON_B = 2,
+    N3DS_BUTTON_X = 3,
+    N3DS_BUTTON_Y = 4,
+    N3DS_BUTTON_L = 5,
+    N3DS_BUTTON_R = 6,
+    N3DS_BUTTON_SELECT = 7
+};
+#endif
+
 enum joyDir
 {
     JOY_DIR_UP = 1,
@@ -51,5 +69,9 @@ bool buttonDown(button b);
 void clearButton(button b);
 bool menuButtonQuery(enum keySymbol ks);
 char *buttonName(button b);
+
+#ifdef __3DS__
+bool translateEvent3ds(SDL_Event *e);
+#endif
 
 #endif

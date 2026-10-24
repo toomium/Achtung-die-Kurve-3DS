@@ -36,4 +36,18 @@ struct player {
 extern struct player players[MAX_PLAYERS];
 extern unsigned char nPlayers;
 
+#ifdef __3DS__
+/* What each of the eight slots is, see the lineup page. */
+enum slotMode {
+    SLOT_OFF,
+    SLOT_AI,
+    SLOT_HUMAN
+};
+extern unsigned char slotMode[MAX_PLAYERS];
+
+/* The setup of slot `i`. While a game runs, players[] is the packed list of the
+ * active slots, so this gives the saved copy then. */
+struct player *slotConfig(int i);
+#endif
+
 #endif

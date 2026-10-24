@@ -8,7 +8,12 @@
 #include "gfx.h"
 #include "player.h"
 
+#ifdef __3DS__
+/* Statically allocated: 300000 particles would take 16.8 MB of the 3DS's RAM. */
+#define MAX_PARTICLES 20000
+#else
 #define MAX_PARTICLES 300000
+#endif
 
 typedef struct particle {
     double x;
@@ -26,6 +31,7 @@ extern Particle particles[MAX_PARTICLES];
 void renderParticles(SDL_Surface *target);
 void updateParticles(Uint32 delta);
 void resetParticles(void);
+bool hasParticles(void);
 int initParticleScreen(int width, int height);
 void addParticles(int num, double x, double y, double velMin, double velMax,
                   double angleMin, double angleMax, double lifeMin,

@@ -450,7 +450,7 @@ void updateShots(Uint32 delta, unsigned char *hitmap)
         struct player *hit = NULL;
 
         if (newX <= 0 || newY <= 0 ||
-                newX >= screen->w || newY >= screen->h ||
+                newX >= gameScreen->w || newY >= gameScreen->h ||
                 (hit = shotHit(s.x, s.y, newX, newY, hitmap, s.owner))) {
             if (hit) {
                 SDL_Color color = colors[hit->color];
@@ -468,8 +468,8 @@ void updateShots(Uint32 delta, unsigned char *hitmap)
                 int toY = s.y + 15;
                 for (int y = fromY; y <= toY; ++y) {
                     for (int x = fromX; x <= toX; ++x) {
-                        if (y >= 0 && y < screen->h &&
-                                x >= 0 && x < screen->w) {
+                        if (y >= 0 && y < gameScreen->h &&
+                                x >= 0 && x < gameScreen->w) {
                             hitmap[WINDOW_W*(int)y + (int)x] = 0;
                         }
                     }

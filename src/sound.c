@@ -20,13 +20,38 @@
 Mix_Music *bgm = NULL;
 Mix_Chunk *sounds[N_SOUNDS];
 
+/* False if the mixer couldn't be opened and the game runs silently. */
+static bool soundAvailable = true;
+
 /**
  * Initialize the mixer. Return -1 on failure, 0 else.
  */
 int initSound(void)
 {
-    return Mix_OpenAudio(MIX_DEFAULT_FREQUENCY * 2, MIX_DEFAULT_FORMAT, 2,
-                         512);
+#ifdef __3DS__
+    /* A small buffer runs dry when the game is busy: sound crackles. */
+    const int buffer = 2048;
+#else
+    const int buffer = 512;
+#endif
+#ifdef __3DS__
+    /* The sounds are converted to 22.05 kHz (3ds/make-romfs.sh), so there is no
+     * need to mix at 44.1 kHz. */
+    const int frequency = MIX_DEFAULT_FREQUENCY;
+#else
+    const int frequency = MIX_DEFAULT_FREQUENCY * 2;
+#endif
+    int status = Mix_OpenAudio(frequency, MIX_DEFAULT_FORMAT, 2, buffer);
+#ifdef __3DS__
+    /* No audio without the DSP firmware (sdmc:/3ds/dspfirm.cdc): go silent
+     * instead of refusing to start. */
+    if (status == -1) {
+        fprintf(stderr, "No sound: %s\n", Mix_GetError());
+        soundAvailable = false;
+        return 0;
+    }
+#endif
+    return status;
 }
 
 /**
@@ -74,6 +99,9 @@ bool loadBGM(const char *filename)
  */
 bool loadSounds(void)
 {
+    if (!soundAvailable)
+        return true;
+
     return loadBGM("theme1.ogg")
         && loadSound(SOUND_BEP, "bep.ogg")
         && loadSound(SOUND_BEEP, "beep.ogg")
@@ -100,6 +128,28 @@ bool loadSounds(void)
 }
 
 /**
+ * Free every sound and close the mixer. Needed on the 3DS before the romfs is
+ * unmounted: the music stays open as a file.
+ */
+void closeSounds(void)
+{
+    if (!soundAvailable)
+        return;
+
+    Mix_HaltMusic();
+    Mix_FreeMusic(bgm);
+    bgm = NULL;
+
+    for (int i = 0; i < N_SOUNDS; ++i) {
+        Mix_FreeChunk(sounds[i]);
+        sounds[i] = NULL;
+    }
+
+    Mix_CloseAudio();
+    soundAvailable = false;
+}
+
+/**
  * Plays a sound.
  *
  * @param sound One of the sounds stated in enum sounds (see sound.h).
@@ -107,7 +157,7 @@ bool loadSounds(void)
  */
 void playSound(unsigned int sound, int play)
 {
-    if (play)
+    if (play && soundAvailable)
         Mix_PlayChannel(-1, sounds[sound], 0);
 }
 
@@ -116,6 +166,9 @@ void playSound(unsigned int sound, int play)
  */
 void playBGM(void)
 {
+    if (!soundAvailable)
+        return;
+
     if (!Mix_PlayingMusic()) {
         if ((Mix_PlayMusic(bgm, -1) == -1)) {
             if (olvl >= O_NORMAL)
@@ -129,5 +182,8 @@ void playBGM(void)
  */
 void stopBGM(void)
 {
+    if (!soundAvailable)
+        return;
+
     Mix_HaltMusic();
 }

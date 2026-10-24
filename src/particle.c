@@ -27,12 +27,11 @@ static double spinCounters[MAX_PLAYERS];
 
 void renderParticle(SDL_Surface *target, Particle *p)
 {
-    unsigned char *px = target->pixels;
-    unsigned int offset = (target->w * (int)p->y + (int)p->x) * SCREEN_BPP/8;
+    Uint32 *px = target->pixels;
+    unsigned int offset = target->w * (int)p->y + (int)p->x;
 
-    px[offset] = p->color.b * p->life;
-    px[offset + 1] = p->color.g * p->life;
-    px[offset + 2] = p->color.r * p->life;
+    px[offset] = SDL_MapRGB(target->format, p->color.r * p->life,
+                            p->color.g * p->life, p->color.b * p->life);
 }
 
 void addParticle(double x, double y, double vel, double angle, double life,
@@ -135,6 +134,11 @@ void renderParticles(SDL_Surface *target)
     }
 
     SDL_UnlockSurface(particleScreen);
+}
+
+bool hasParticles(void)
+{
+    return numParticles > 0;
 }
 
 void resetParticles(void)

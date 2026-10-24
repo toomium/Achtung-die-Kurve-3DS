@@ -117,6 +117,65 @@ int axisNumber(SDL_JoyAxisEvent e)
     return e.value < 0 ? JOY_DIR_LEFT : JOY_DIR_RIGHT;
 }
 
+#ifdef __3DS__
+/* The circle pad drifts around zero, so ignore small deflections. */
+static const int CIRCLE_PAD_DEADZONE = 8000;
+
+/* Which way each circle pad axis is currently deflected: -1, 0 or 1. */
+static int circlePadDir[2];
+
+/**
+ * Adapt an event from the 3DS joypad to what the game expects.
+ *
+ * - The D-pad arrives as a hat; it is turned into the same flags that the
+ *   circle pad's axes set.
+ * - B becomes the escape key, which is "back" in the menus.
+ * - The circle pad reports every little change while it moves. Only the
+ *   change of direction (centered, left/up, right/down) is passed on, so one
+ *   push moves one menu entry. Small deflections count as centered. The
+ *   C-stick (axes 2 and 3) is ignored.
+ *
+ * Return false if the event was handled completely and should be skipped.
+ */
+bool translateEvent3ds(SDL_Event *e)
+{
+    switch (e->type) {
+    case SDL_JOYHATMOTION: {
+        bool *down = joyButtonDown[e->jhat.which];
+        down[JOY_DIR_UP << 4] = e->jhat.value & SDL_HAT_UP;
+        down[JOY_DIR_RIGHT << 4] = e->jhat.value & SDL_HAT_RIGHT;
+        down[JOY_DIR_DOWN << 4] = e->jhat.value & SDL_HAT_DOWN;
+        down[JOY_DIR_LEFT << 4] = e->jhat.value & SDL_HAT_LEFT;
+        return false;
+    }
+    case SDL_JOYBUTTONDOWN:
+        if (e->jbutton.button == N3DS_BUTTON_B) {
+            e->type = SDL_KEYDOWN;
+            e->key.state = SDL_PRESSED;
+            e->key.keysym.sym = SDLK_ESCAPE;
+        }
+        return true;
+    case SDL_JOYAXISMOTION: {
+        if (e->jaxis.axis > 1)
+            return false;
+
+        int value = e->jaxis.value;
+        int dir = value > CIRCLE_PAD_DEADZONE ? 1
+            : value < -CIRCLE_PAD_DEADZONE ? -1 : 0;
+
+        if (dir == circlePadDir[e->jaxis.axis])
+            return false;
+
+        circlePadDir[e->jaxis.axis] = dir;
+        e->jaxis.value = dir * 32767;
+        return true;
+    }
+    default:
+        return true;
+    }
+}
+#endif
+
 /**
  * Return true if one of the enter buttons are currently down.
  */
@@ -223,6 +282,15 @@ char *buttonName(button b)
     char *keyname = calloc(BUTTON_NAME_MAX_LEN, sizeof(char));
 
     if (isJoyButton(b)) {
+#ifdef __3DS__
+        static const char *names3ds[] = {"START", "A", "B", "X", "Y", "L", "R",
+                                         "SELECT", "ZL", "ZR"};
+        int n = joyButtonNumber(b);
+        if (n < (int)(sizeof(names3ds) / sizeof(names3ds[0]))) {
+            snprintf(keyname, BUTTON_NAME_MAX_LEN, "%s", names3ds[n]);
+        }
+        else
+#endif
         if (numJoys > 1) {
             snprintf(keyname, BUTTON_NAME_MAX_LEN, "joy-%d (%d)",
                      (short) joyButtonNumber(b) + 1,
@@ -234,6 +302,13 @@ char *buttonName(button b)
         }
     }
     else if (isJoyAxis(b)) {
+#ifdef __3DS__
+        /* The D-pad and the circle pad give the same directions. */
+        static const char *pad[] = {"", "PAD UP", "PAD RIGHT", "PAD DOWN",
+                                    "PAD LEFT"};
+        snprintf(keyname, BUTTON_NAME_MAX_LEN, "%s", pad[joyAxisDir(b)]);
+        return keyname;
+#endif
         int axisNumber = joyAxisDir(b);
         char *axisName = "";
 

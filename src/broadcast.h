@@ -14,7 +14,7 @@
 
 /* Broadcast colors */
 static const SDL_Color cBroadcast = {0xFF, 0xFF, 0xFF, 0};
-static const SDL_Color cMenuBG    = {0x00, 0x00, 0x00, 0};
+static const SDL_Color cMenuBG    = {BG_R, BG_G, BG_B, 0};
 
 /* Broadcast fonts */
 extern TTF_Font *font_broadc;

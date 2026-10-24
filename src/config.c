@@ -17,7 +17,12 @@
 
 #include "config.h"
 
+#ifdef __3DS__
+#include "platform.h"
+#endif
+
 unsigned int scorecap = DEFAULT_SCORECAP;
+int gameSpeed = 100;
 bool fullscreen = DEFAULT_FULLSCREEN;
 bool sound = DEFAULT_SOUND;
 bool music = DEFAULT_MUSIC;
@@ -27,17 +32,24 @@ bool broadcasts = DEFAULT_BROADCASTS;
 bool particleEffects = DEFAULT_PARTICLE_EFFECTS;
 bool border = DEFAULT_BORDER;
 bool duelmode = DEFAULT_DUELMODE;
+bool shake = DEFAULT_SHAKE;
+bool debugLog = false;
 const char *settingNames[] = {"fullscreen", "sound", "music", "weapons",
                               "holes", "broadcasts", "particleEffects",
-                              "border", "duelmode"};
-bool *settings[9] = {&fullscreen, &sound, &music, &weapons, &holes,
-                     &broadcasts, &particleEffects, &border, &duelmode};
+                              "border", "duelmode", "shake", "debug"};
+bool *settings[11] = {&fullscreen, &sound, &music, &weapons, &holes,
+                      &broadcasts, &particleEffects, &border, &duelmode,
+                      &shake, &debugLog};
 
 /**
  * Return that path of the directory where the config file resides.
  */
 char *getConfigPath(void)
 {
+#ifdef __3DS__
+    /* There is no HOME on the 3DS; settings live on the SD card. */
+    return strdup(CONFIG_DIR_3DS);
+#else
     char *home = getenv("HOME");
     char *xdg_config_home = getenv("XDG_CONFIG_HOME");
 
@@ -50,6 +62,7 @@ char *getConfigPath(void)
              xdg_config_home ? "" : ".config/");
 
     return config_path;
+#endif
 }
 
 /**
@@ -60,6 +73,10 @@ char *getConfigPath(void)
  */
 int ensureConfigPath(void)
 {
+#ifdef __3DS__
+    /* mkdir() doesn't create parents, and the emulator's SD card may lack it. */
+    mkdir("sdmc:/3ds", S_IRWXU);
+#endif
     char *configPath = getConfigPath();
     int status = mkdir(configPath, S_IRWXU);
     free(configPath);
@@ -87,9 +104,33 @@ char *getConfigFile(void)
  */
 void saveSettings(void)
 {
+#ifdef __3DS__
+    platformTrace("save: start");
+#endif
     ensureConfigPath();
+#ifdef __3DS__
+    platformTrace("save: mkdir");
+#endif
     char *filename = getConfigFile();
+#ifdef __3DS__
+    /* The first write to a newly created or truncated file on the SD card
+     * takes about ten seconds. So overwrite an existing file in place (no
+     * truncating, it never shrinks, see below) and only create it once. */
+    FILE *file = fopen(filename, "r+");
+    long oldSize = 0;
+    if (file != NULL) {
+        /* A file that someone edited may be longer than we write: remember how
+         * long, to cover the old rest with blanks. */
+        fseek(file, 0, SEEK_END);
+        oldSize = ftell(file);
+        fseek(file, 0, SEEK_SET);
+    } else {
+        file = fopen(filename, "w");
+    }
+    platformTrace("save: fopen");
+#else
     FILE *file = fopen(filename, "w");
+#endif
 
     if (file == NULL) {
         if (olvl >= O_NORMAL) {
@@ -105,21 +146,45 @@ void saveSettings(void)
     }
 
     fprintf(file, "scorecap = %d\n", scorecap);
+    fprintf(file, "gamespeed = %d\n", gameSpeed);
     for (unsigned int i = 0; i < MAX_PLAYERS; ++i) {
-        fprintf(file, "%dn = %s\n", i + 1, (&players[i])->name);
-        fprintf(file, "%dc = %d\n", i + 1, (&players[i])->color);
-        fprintf(file, "%da = %d\n", i + 1, (&players[i])->ai);
-        fprintf(file, "%dl = %d\n", i + 1, (&players[i])->lkey);
-        fprintf(file, "%dw = %d\n", i + 1, (&players[i])->wkey);
-        fprintf(file, "%dr = %d\n", i + 1, (&players[i])->rkey);
+#ifdef __3DS__
+        struct player *sp = slotConfig(i);
+        fprintf(file, "%dm = %d\n", i + 1, slotMode[i]);
+#else
+        struct player *sp = &players[i];
+#endif
+        fprintf(file, "%dn = %s\n", i + 1, sp->name);
+        fprintf(file, "%dc = %d\n", i + 1, sp->color);
+        fprintf(file, "%da = %d\n", i + 1, sp->ai);
+        fprintf(file, "%dl = %d\n", i + 1, sp->lkey);
+        fprintf(file, "%dw = %d\n", i + 1, sp->wkey);
+        fprintf(file, "%dr = %d\n", i + 1, sp->rkey);
     }
 
     if (olvl >= O_NORMAL && ferror(file)) {
         fprintf(stderr, "Error writing to file '%s'.\n", filename);
     }
+#ifdef __3DS__
+    /* Fill the file up to a fixed size with blanks, so that it never shrinks
+     * and the old content is overwritten completely. restoreSettings() stops
+     * at the blanks. */
+    long fill = oldSize > SETTINGS_FILE_SIZE ? oldSize : SETTINGS_FILE_SIZE;
+    for (long size = ftell(file); size < fill - 1; ++size)
+        fputc(' ', file);
+    fputc('\n', file);
+    platformTrace("save: fprintf");
+#endif
 
     free(filename);
+#ifdef __3DS__
+    fflush(file);
+    platformTrace("save: fflush (write)");
+#endif
     fclose(file);
+#ifdef __3DS__
+    platformTrace("save: fclose");
+#endif
 }
 
 /**
@@ -158,9 +223,19 @@ void restoreSettings(void)
             scorecap = atoi(value);
             valid = true;
         }
+        else if (!valid && strncmp("gamespeed", setting, STRBUF) == 0) {
+            gameSpeed = atoi(value);
+            valid = true;
+        }
         else if (!valid && isdigit(setting[0])) {
             struct player *p = &players[setting[0] - '0' - 1];
             switch (setting[1]) {
+#ifdef __3DS__
+            case 'm': /* Slot mode: off, AI, human */
+                slotMode[setting[0] - '0' - 1] = atoi(value);
+                valid = true;
+                break;
+#endif
             case 'n': /* Name */
                 strncpy(p->name, value, PLAYER_NAME_LEN);
                 valid = true;

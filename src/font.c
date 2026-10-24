@@ -40,14 +40,38 @@ bool loadFont(Font f, const char *filename, FontSize size)
 }
 
 /**
+ * Close every font. Needed on the 3DS before the romfs is unmounted: an open
+ * font keeps its file open.
+ */
+void closeFonts(void)
+{
+    for (int i = 0; i < N_FONTS; ++i) {
+        if (fonts[i] != NULL) {
+            TTF_CloseFont(fonts[i]);
+            fonts[i] = NULL;
+        }
+    }
+}
+
+/**
  * Load every needed font file. Return true if every file loaded
  * successfully, otherwise false.
  */
 bool loadFonts(void)
 {
+#ifdef __3DS__
+    /* One pixel font for everything (3ds/assets/fonts). */
+    const char *pixel = "PressStart2P-Regular.ttf";
+    return loadFont(FONT_MENU, pixel, FONT_SIZE_MENU)
+        && loadFont(FONT_MENU_BOLD, pixel, FONT_SIZE_MENU)
+        && loadFont(FONT_BROADCAST, pixel, FONT_SIZE_BROADCAST)
+        && loadFont(FONT_BROADCAST_BOLD, pixel, FONT_SIZE_BROADCAST)
+        && loadFont(FONT_SCORE, pixel, FONT_SIZE_SCORE);
+#else
     return loadFont(FONT_MENU, "jura/JuraLight.ttf", FONT_SIZE_MENU)
         && loadFont(FONT_MENU_BOLD, "jura/JuraMedium.ttf", FONT_SIZE_MENU)
         && loadFont(FONT_BROADCAST, "ankacoder/AnkaCoder-r.ttf", FONT_SIZE_BROADCAST)
         && loadFont(FONT_BROADCAST_BOLD, "ankacoder/AnkaCoder-b.ttf", FONT_SIZE_BROADCAST)
         && loadFont(FONT_SCORE, "jura/JuraMedium.ttf", FONT_SIZE_SCORE);
+#endif
 }

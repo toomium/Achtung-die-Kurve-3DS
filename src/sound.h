@@ -39,6 +39,7 @@ extern Mix_Music *bgm;
 int initSound(void);
 bool loadSound(Sound s, const char *filename);
 bool loadSounds(void);
+void closeSounds(void);
 void playSound(unsigned int sound, int play);
 void playBGM(void);
 void stopBGM(void);

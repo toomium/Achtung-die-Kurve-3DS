@@ -10,3 +10,4 @@ config.status
 gmon.out
 src/*.o
 zatackax
+.vscode/
