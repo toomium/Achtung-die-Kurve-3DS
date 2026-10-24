@@ -2261,7 +2261,7 @@ static void drawLobbyTop(void)
 }
 
 /* One row of the details: a panel with a label, the value is drawn by the caller. */
-static SDL_Rect lobbyRowPanel(int y, bool focused, const char *label)
+SDL_Rect lobbyRowPanel(int y, bool focused, const char *label)
 {
     SDL_Rect r = {16, y, 288, 26};
     uiPanel(screen, r, uiColPanel,
@@ -2539,7 +2539,7 @@ static void drawRulesTop(void)
 
 /* A row of buttons, one of them active, right aligned in the row (10 pixels
  * from the edge). `enabled` has a bit per button. */
-static void drawChoice(SDL_Rect row, int id, int w, int n, const char *labels[],
+void drawChoice(SDL_Rect row, int id, int w, int n, const char *labels[],
                        int active, unsigned enabled)
 {
     int x = row.x + row.w - 10 - (n * w + (n - 1) * 4);
@@ -2559,7 +2559,7 @@ static void drawChoice(SDL_Rect row, int id, int w, int n, const char *labels[],
 }
 
 /* An on/off switch at the right end of a row. */
-static void drawSwitch(SDL_Rect row, int id, bool on)
+void drawSwitch(SDL_Rect row, int id, bool on)
 {
     touchAdd(row, id, 0);
     SDL_Rect track = {row.x + row.w - 58, row.y + 5, 44, 16};

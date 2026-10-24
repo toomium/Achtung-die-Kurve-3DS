@@ -135,6 +135,13 @@ bool netJoin(int index)
     return true;
 }
 
+bool netLockJoining(bool lock)
+{
+    if (!inGroup || !hosting)
+        return false;
+    return !failed(udsSetNewConnectionsBlocked(lock, true, false));
+}
+
 void netLeave(void)
 {
     if (!inGroup)

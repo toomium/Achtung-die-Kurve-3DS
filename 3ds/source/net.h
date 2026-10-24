@@ -47,6 +47,9 @@ int netScan(struct netGroup *groups, int max);
 /* Joins group number `index` of the last netScan(). */
 bool netJoin(int index);
 
+/* Host: stop (true) or allow (false) new consoles joining the group. */
+bool netLockJoining(bool lock);
+
 /* Leaves the group; the host closes it for everyone. */
 void netLeave(void);
 

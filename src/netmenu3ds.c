@@ -28,6 +28,9 @@ void setNextKey(unsigned char pedit, unsigned char key);
 static struct scene choiceScene;
 static struct scene browseScene;
 static struct scene lobbyScene;
+static struct scene rulesScene;
+static struct scene waitScene;
+static struct scene readyScene;
 
 static const char *message = NULL;      /* Shown in red when something failed */
 
@@ -266,17 +269,29 @@ static void touchBrowse(int id, int value, bool released)
         touchPressA();
 }
 
-/* ---- The lobby ---- */
+/* ---- The group: lobby, rules, ready ---- */
 
-/* What the lobby knows about each node (index node - 1). The host decides, the
+/* What the group knows about each node (index node - 1). The host decides, the
  * clients show what the host sends. */
 struct member {
     unsigned char used;
     unsigned char color;
+    unsigned char ready;
     char name[PLAYER_NAME_LEN];
 };
 
-enum { MSG_PROFILE = 1, MSG_LOBBY = 2 };
+/* What the host chooses for the match. */
+struct netRules {
+    unsigned short points;      /* 0: no limit */
+    unsigned char holes;
+    unsigned char duel;
+    unsigned char speed;        /* Index into speedChoices */
+    unsigned char ai;           /* Computer players added to the humans */
+};
+
+enum { PH_LOBBY, PH_RULES, PH_READY };
+
+enum { MSG_PROFILE = 1, MSG_STATE = 2, MSG_READY = 3, MSG_ABORT = 4 };
 
 /* A client tells the host how it wants to appear. */
 struct msgProfile {
@@ -285,31 +300,69 @@ struct msgProfile {
     char name[PLAYER_NAME_LEN];
 };
 
-/* The host tells everyone who is in the group. Sent whenever something changes
- * and now and then anyway, so a lost message does no harm. */
-struct msgLobby {
+/* The host tells everyone the whole state of the group. Sent whenever
+ * something changes and now and then anyway, so a lost message does no harm. */
+struct msgState {
     unsigned char type;
+    unsigned char phase;
+    unsigned char beginCount;   /* Counts up when a match is started */
+    unsigned short readyLeft;   /* Milliseconds of the READY phase that are left */
+    struct netRules rules;
     struct member members[NET_MAX_NODES];
 };
 
-#define RESEND_MS 1000
+#define RESEND_MS    1000
+#define READY_MS     30000
+#define NOTICE_MS    3500
 
-enum { ROW_NAME, ROW_COLOR, ROW_LEFT, ROW_RIGHT, N_ROWS };
+static const unsigned pointChoices[] = {10, 20, 30, 40, 50, 100, 0};
+#define N_POINTS ((int)(sizeof(pointChoices) / sizeof(pointChoices[0])))
+static const int speedChoices[] = {75, 100, 125, 150};
+#define N_SPEEDS ((int)(sizeof(speedChoices) / sizeof(speedChoices[0])))
+
+enum { ROW_NAME, ROW_COLOR, ROW_LEFT, ROW_RIGHT, ROW_START, N_ROWS };
+enum { RULE_POINTS, RULE_HOLES, RULE_DUEL, RULE_SPEED, RULE_AI, RULE_GO,
+       N_RULE_ROWS };
 #define TOUCH_SWATCH 10
 
 static struct member members[NET_MAX_NODES];
+static struct netRules rules;
+static int phase = PH_LOBBY;
+static unsigned char beginCount = 0;
 static unsigned lobbyMask = 0;
+static unsigned lockedMask = 0;         /* Who was there when the rules began */
 static bool lobbyFresh = true;
 static bool lobbyDirty = false;         /* Something to send to the others */
 static Uint32 lastSend = 0;
 static int lobbyRow = 0;
+static int rulesRow = 0;
 static int wantColor = 0;               /* The color this console asks for */
 static int colorCursor = 0;
+static bool wantReady = false;
+static Uint32 readyDeadline = 0;        /* Host: when the READY phase ends */
+static unsigned readyLeftAtRecv = 0;    /* Client: what the host said, and when */
+static Uint32 readyRecvTime = 0;
+static Uint32 noticeUntil = 0;
+static int shownSeconds = -1;
+
+/* In zatackax.c: widgets of the rules page. */
+SDL_Rect lobbyRowPanel(int y, bool focused, const char *label);
+void drawChoice(SDL_Rect row, int id, int w, int n, const char *labels[],
+                int active, unsigned enabled);
+void drawSwitch(SDL_Rect row, int id, bool on);
 
 /* The profile of this console: name and buttons are those of slot 1. */
 static struct player *me(void)
 {
     return &players[0];
+}
+
+static int memberCount(void)
+{
+    int n = 0;
+    for (int i = 0; i < NET_MAX_NODES; ++i)
+        n += members[i].used;
+    return n;
 }
 
 static bool colorTaken(int color, int exceptNode)
@@ -339,9 +392,8 @@ static void applyProfile(int node, int color, const char *name)
 
     if (color >= 0 && color < N_COLORS && !colorTaken(color, node))
         m->color = color;
-    if (name != NULL && strncmp(m->name, name, PLAYER_NAME_LEN - 1) != 0) {
+    if (name != NULL && strncmp(m->name, name, PLAYER_NAME_LEN - 1) != 0)
         snprintf(m->name, sizeof(m->name), "%s", name);
-    }
     m->used = 1;
     lobbyDirty = true;
 }
@@ -365,10 +417,24 @@ static void hostMembers(void)
     }
 }
 
-static void sendLobby(void)
+static unsigned readyRemaining(void)
 {
-    struct msgLobby msg;
-    msg.type = MSG_LOBBY;
+    Uint32 now = SDL_GetTicks();
+    if (netIsHost())
+        return now < readyDeadline ? readyDeadline - now : 0;
+    Uint32 gone = now - readyRecvTime;
+    return gone < readyLeftAtRecv ? readyLeftAtRecv - gone : 0;
+}
+
+static void sendState(void)
+{
+    struct msgState msg;
+    memset(&msg, 0, sizeof(msg));
+    msg.type = MSG_STATE;
+    msg.phase = phase;
+    msg.beginCount = beginCount;
+    msg.readyLeft = phase == PH_READY ? readyRemaining() : 0;
+    msg.rules = rules;
     memcpy(msg.members, members, sizeof(members));
     netSend(NET_ALL_NODES, &msg, sizeof(msg));
 }
@@ -379,7 +445,13 @@ static void sendProfile(void)
     memset(&msg, 0, sizeof(msg));
     msg.type = MSG_PROFILE;
     msg.color = wantColor;
-    strncpy(msg.name, me()->name, PLAYER_NAME_LEN - 1);
+    snprintf(msg.name, sizeof(msg.name), "%s", me()->name);
+    netSend(NET_HOST_NODE, &msg, sizeof(msg));
+}
+
+static void sendReady(void)
+{
+    unsigned char msg = MSG_READY;
     netSend(NET_HOST_NODE, &msg, sizeof(msg));
 }
 
@@ -395,16 +467,36 @@ static void profileChanged(void)
     }
 }
 
+/* Host: a new phase begins. */
+static void setPhase(int next)
+{
+    phase = next;
+    lobbyDirty = true;
+    lastSend = 0;
+}
+
 static void initLobby(void)
 {
     lobbyFresh = false;
     lobbyDirty = false;
     lobbyRow = 0;
+    rulesRow = 0;
+    phase = PH_LOBBY;
+    wantReady = false;
     memset(members, 0, sizeof(members));
     wantColor = me()->color % N_COLORS;
     colorCursor = wantColor;
     lastSend = 0;
     if (netIsHost()) {
+        rules.points = scorecap;
+        rules.holes = holes;
+        rules.duel = duelmode;
+        rules.speed = 1;
+        for (int i = 0; i < N_SPEEDS; ++i) {
+            if (speedChoices[i] == gameSpeed)
+                rules.speed = i;
+        }
+        rules.ai = 0;
         hostMembers();
         profileChanged();
     } else {
@@ -412,8 +504,74 @@ static void initLobby(void)
     }
 }
 
-/* Handles the messages that came in. Returns true if the lobby changed. */
-static bool receiveLobby(void)
+/* Leaves the group for the first page. */
+static void goToChoice(const char *why)
+{
+    netLeave();
+    lobbyFresh = true;
+    lobbyMask = 0;
+    message = why;
+    playSound(SOUND_BEP, sound);
+    curScene = &choiceScene;
+}
+
+/* Host: someone left while the group was locked. Tells everyone and ends. */
+static void abortAll(void)
+{
+    unsigned char msg = MSG_ABORT;
+    for (int i = 0; i < 3; ++i) {
+        netSend(NET_ALL_NODES, &msg, sizeof(msg));
+        SDL_Delay(60);
+    }
+    goToChoice("A PLAYER LEFT");
+}
+
+static void enterScene(struct scene *s)
+{
+    curScene = s;
+    shownSeconds = -1;
+}
+
+/* Back to the lobby (host: cancels the rules or the READY phase). */
+static void cancelToLobby(void)
+{
+    if (!netIsHost())
+        return;
+    netLockJoining(false);
+    for (int i = 0; i < NET_MAX_NODES; ++i)
+        members[i].ready = 0;
+    setPhase(PH_LOBBY);
+}
+
+/* The READY phase is over: everybody is ready, or the time has run out. */
+static void beginMatch(void)
+{
+    netLockJoining(false);
+    for (int i = 0; i < NET_MAX_NODES; ++i)
+        members[i].ready = 0;
+    ++beginCount;
+    noticeUntil = SDL_GetTicks() + NOTICE_MS;
+    setPhase(PH_LOBBY);
+    enterScene(&lobbyScene);
+    playSound(SOUND_ROUND_BEGIN, sound);
+}
+
+/* Client: the host's phase decides which page is shown. */
+static void followHost(void)
+{
+    struct scene *target = phase == PH_RULES ? &waitScene
+        : phase == PH_READY ? &readyScene : &lobbyScene;
+    if (curScene == target)
+        return;
+    if (target == &readyScene) {
+        wantReady = false;
+        readyScene.parentScene = &choiceScene;
+    }
+    enterScene(target);
+}
+
+/* Handles the messages that came in. Returns true if the page changed. */
+static bool receiveMessages(void)
 {
     unsigned char buf[NET_MAX_PACKET];
     bool changed = false;
@@ -421,29 +579,120 @@ static bool receiveLobby(void)
     size_t len;
 
     while ((len = netRecv(buf, sizeof(buf), &from)) > 0) {
-        if (netIsHost() && buf[0] == MSG_PROFILE && len >= sizeof(struct msgProfile)
-                && from >= 1 && from <= NET_MAX_NODES) {
-            struct msgProfile msg;
-            memcpy(&msg, buf, sizeof(msg));
-            msg.name[PLAYER_NAME_LEN - 1] = '\0';
-            if (members[from - 1].used) {
+        if (netIsHost()) {
+            if (from < 1 || from > NET_MAX_NODES || !members[from - 1].used)
+                continue;
+            if (buf[0] == MSG_PROFILE && len >= sizeof(struct msgProfile)) {
+                struct msgProfile msg;
+                memcpy(&msg, buf, sizeof(msg));
+                msg.name[PLAYER_NAME_LEN - 1] = '\0';
                 struct member before = members[from - 1];
                 applyProfile(from, msg.color, msg.name);
                 changed |= memcmp(&before, &members[from - 1],
                                   sizeof(before)) != 0;
-            }
-        } else if (!netIsHost() && buf[0] == MSG_LOBBY
-                   && len >= sizeof(struct msgLobby) && from == NET_HOST_NODE) {
-            struct msgLobby msg;
-            memcpy(&msg, buf, sizeof(msg));
-            if (memcmp(msg.members, members, sizeof(members)) != 0) {
-                memcpy(members, msg.members, sizeof(members));
+            } else if (buf[0] == MSG_READY && phase == PH_READY
+                       && !members[from - 1].ready) {
+                members[from - 1].ready = 1;
+                lobbyDirty = true;
                 changed = true;
+            }
+        } else if (from == NET_HOST_NODE) {
+            if (buf[0] == MSG_STATE && len >= sizeof(struct msgState)) {
+                struct msgState msg;
+                memcpy(&msg, buf, sizeof(msg));
+                if (memcmp(msg.members, members, sizeof(members)) != 0
+                        || memcmp(&msg.rules, &rules, sizeof(rules)) != 0
+                        || msg.phase != phase)
+                    changed = true;
+                memcpy(members, msg.members, sizeof(members));
+                rules = msg.rules;
+                readyLeftAtRecv = msg.readyLeft;
+                readyRecvTime = SDL_GetTicks();
+                if (msg.beginCount != beginCount) {
+                    beginCount = msg.beginCount;
+                    noticeUntil = SDL_GetTicks() + NOTICE_MS;
+                    playSound(SOUND_ROUND_BEGIN, sound);
+                    changed = true;
+                }
+                phase = msg.phase;
+            } else if (buf[0] == MSG_ABORT) {
+                goToChoice("A PLAYER LEFT");
+                return true;
             }
         }
     }
     return changed;
 }
+
+/*
+ * What every page of the group does each frame: look after the connection,
+ * receive, and (host) send the state. Returns true if the page has to be
+ * redrawn. May change the page; the caller must then stop at once.
+ */
+static bool netPump(void)
+{
+    if (!netConnected()) {
+        goToChoice("CONNECTION LOST");
+        return true;
+    }
+
+    bool changed = false;
+    if (lobbyFresh) {
+        initLobby();
+        changed = true;
+    }
+
+    struct scene *before = curScene;
+    changed |= receiveMessages();
+    if (curScene != before)
+        return true;
+
+    Uint32 now = SDL_GetTicks();
+    if (netIsHost()) {
+        unsigned mask = netNodeMask();
+        if (mask != lobbyMask) {
+            if (phase != PH_LOBBY && mask != lockedMask) {
+                abortAll();
+                return true;
+            }
+            lobbyMask = mask;
+            hostMembers();
+            playSound(SOUND_BEEP, sound);
+            changed = true;
+        }
+        if (phase == PH_READY) {
+            bool all = true;
+            for (int i = 0; i < NET_MAX_NODES; ++i) {
+                if (members[i].used && !members[i].ready)
+                    all = false;
+            }
+            if (all || now >= readyDeadline) {
+                beginMatch();
+                return true;
+            }
+        }
+        if (lobbyDirty || now - lastSend > RESEND_MS) {
+            sendState();
+            lobbyDirty = false;
+            lastSend = now;
+        }
+    } else {
+        lobbyMask = netNodeMask();
+        if (now - lastSend > RESEND_MS || (wantReady && now - lastSend > 400)) {
+            sendProfile();
+            if (wantReady && phase == PH_READY)
+                sendReady();
+            lastSend = now;
+        }
+        before = curScene;
+        followHost();
+        if (curScene != before)
+            return true;
+    }
+    return changed;
+}
+
+/* ---- The lobby ---- */
 
 static void requestColor(int color)
 {
@@ -459,6 +708,20 @@ static void requestColor(int color)
     playSound(SOUND_BEEP, sound);
     wantColor = color;
     profileChanged();
+}
+
+/* Host: closes the group and goes on to the rules. */
+static void startRules(void)
+{
+    lockedMask = netNodeMask();
+    netLockJoining(true);
+    rulesRow = 0;
+    if (rules.ai + memberCount() < MIN_PLAYERS)
+        rules.ai = MIN_PLAYERS - memberCount();
+    setPhase(PH_RULES);
+    playSound(SOUND_BEEP, sound);
+    rulesScene.parentScene = &lobbyScene;
+    enterScene(&rulesScene);
 }
 
 static void lobbyActivate(void)
@@ -482,47 +745,22 @@ static void lobbyActivate(void)
         lobbyScene.displayFunc();       /* Show that a button is awaited */
         setNextKey(0, lobbyRow == ROW_LEFT ? 'l' : 'r');
         break;
+    case ROW_START:
+        if (netIsHost())
+            startRules();
+        break;
     }
 }
 
 static int logicLobby(void)
 {
-    if (!netConnected()) {
-        netLeave();
-        lobbyFresh = true;
-        message = "CONNECTION LOST";
-        playSound(SOUND_BEP, sound);
-        curScene = &choiceScene;
+    bool changed = netPump();
+    if (curScene != &lobbyScene)
         return 1;
-    }
 
-    bool changed = false;
-    if (lobbyFresh) {
-        initLobby();
+    if (noticeUntil != 0 && SDL_GetTicks() >= noticeUntil) {
+        noticeUntil = 0;
         changed = true;
-    }
-
-    changed |= receiveLobby();
-
-    if (netIsHost()) {
-        unsigned mask = netNodeMask();
-        if (mask != lobbyMask) {
-            lobbyMask = mask;
-            hostMembers();
-            playSound(SOUND_BEEP, sound);
-            changed = true;
-        }
-        if (lobbyDirty || SDL_GetTicks() - lastSend > RESEND_MS) {
-            sendLobby();
-            lobbyDirty = false;
-            lastSend = SDL_GetTicks();
-        }
-    } else {
-        lobbyMask = netNodeMask();
-        if (SDL_GetTicks() - lastSend > RESEND_MS) {
-            sendProfile();
-            lastSend = SDL_GetTicks();
-        }
     }
 
     if (enterButtonDown()) {
@@ -531,8 +769,9 @@ static int logicLobby(void)
         return 1;
     }
 
+    int rows = netIsHost() ? N_ROWS : N_ROWS - 1;
     int oldRow = lobbyRow, oldCursor = colorCursor;
-    if (menuButtonQuery(KEY_DOWN) && lobbyRow < N_ROWS - 1)
+    if (menuButtonQuery(KEY_DOWN) && lobbyRow < rows - 1)
         ++lobbyRow;
     else if (menuButtonQuery(KEY_UP) && lobbyRow > 0)
         --lobbyRow;
@@ -555,7 +794,8 @@ static void leaveLobby(void)
     message = NULL;
 }
 
-static void drawLobbyTop(void)
+/* The members on the top screen; in the READY phase with a mark when ready. */
+static void drawGroupTop(bool showReady)
 {
     const int w = 88, h = 100, gap = 8, x0 = 12, y0 = 14;
     int mine = netMyNode();
@@ -573,7 +813,8 @@ static void drawLobbyTop(void)
         SDL_Rect cell = {x0 + (slot % 4) * (w + gap),
                          y0 + (slot / 4) * (h + gap), w, h};
         cell = uiCard(screen, cell, uiColPanel,
-                      n == mine ? uiColAccent : uiMix(uiColPanel, c, 55),
+                      showReady && m->ready ? uiColGreen
+                      : n == mine ? uiColAccent : uiMix(uiColPanel, c, 55),
                       n == mine);
         int cx = cell.x + w / 2;
         uiBall(screen, cx, cell.y + 34, 8, 2, c);
@@ -582,8 +823,13 @@ static void drawLobbyTop(void)
         snprintf(name, sizeof(name), "%s", m->name);
         uiText(screen, FONT_BROADCAST, name[0] != '\0' ? name : "...", c, cx,
                cell.y + 60, UI_CENTER);
-        uiText(screen, FONT_MENU, n == NET_HOST_NODE ? "HOST" : "",
-               uiColGreen, cx, cell.y + 76, UI_CENTER);
+        if (showReady)
+            uiText(screen, FONT_MENU, m->ready ? "READY" : "...",
+                   m->ready ? uiColGreen : uiColOff, cx, cell.y + 76,
+                   UI_CENTER);
+        else
+            uiText(screen, FONT_MENU, n == NET_HOST_NODE ? "HOST" : "",
+                   uiColGreen, cx, cell.y + 76, UI_CENTER);
         ++slot;
     }
 
@@ -613,7 +859,7 @@ static SDL_Rect profileRow(int y, int h, int row, const char *label)
 
 static void displayLobby(void)
 {
-    drawLobbyTop();
+    drawGroupTop(false);
 
     useBottomView();
     clearBackground(screen);
@@ -652,16 +898,27 @@ static void displayLobby(void)
         free(text);
     }
 
-    int members_n = 0;
-    for (int n = 0; n < NET_MAX_NODES; ++n)
-        members_n += members[n].used;
-    char line[40];
-    snprintf(line, sizeof(line), "%d / %d  %s", members_n, NET_MAX_NODES,
-             netIsHost() ? "WAITING FOR PLAYERS" : "WAITING FOR THE HOST");
-    uiText(screen, FONT_BROADCAST, line, uiColDim, 160, 150, UI_CENTER);
+    char line[48];
+    if (noticeUntil != 0) {
+        snprintf(line, sizeof(line), "ALL READY! THE GAME COMES NEXT");
+        uiText(screen, FONT_BROADCAST, line, uiColGreen, 160, 148, UI_CENTER);
+    } else {
+        snprintf(line, sizeof(line), "%d / %d  %s", memberCount(),
+                 NET_MAX_NODES,
+                 netIsHost() ? "PLAYERS" : "WAITING FOR THE HOST");
+        uiText(screen, FONT_BROADCAST, line, uiColDim, 160, 148, UI_CENTER);
+    }
 
-    struct uiHint hints[] = {{"A", lobbyRow == ROW_COLOR ? "PICK" : "CHANGE", 6},
-                             {"B", "LEAVE"}};
+    if (netIsHost()) {
+        SDL_Rect go = {16, 168, 288, 34};
+        touchAdd(go, ROW_START, TOUCH_ROW);
+        uiTile(screen, go, "START", NULL, NULL, uiColGreen,
+               lobbyRow == ROW_START, true);
+    }
+
+    const char *action = lobbyRow == ROW_COLOR ? "PICK"
+        : lobbyRow == ROW_START ? "START" : "CHANGE";
+    struct uiHint hints[] = {{"A", action, 6}, {"B", "LEAVE"}};
     uiHintBar(screen, hints, 2);
 
     if (presentFrame() == -1)
@@ -683,6 +940,312 @@ static void touchLobby(int id, int value, bool released)
     }
 }
 
+/* ---- The rules (host) ---- */
+
+static const char *const ruleTitle[N_RULE_ROWS] = {
+    "MAX POINTS", "HOLES", "DUEL MODE", "SPEED", "AI PLAYERS", "GO"
+};
+
+static int pointsIndex(void)
+{
+    for (int i = 0; i < N_POINTS; ++i) {
+        if (pointChoices[i] == rules.points)
+            return i;
+    }
+    return 3;
+}
+
+/* AI players can fill up to the eight places. */
+static int maxAi(void)
+{
+    return NET_MAX_NODES - memberCount();
+}
+
+static void ruleChange(int row, int dir)
+{
+    switch (row) {
+    case RULE_POINTS:
+        rules.points = pointChoices[(pointsIndex() + dir + N_POINTS) % N_POINTS];
+        break;
+    case RULE_HOLES:
+        rules.holes = !rules.holes;
+        break;
+    case RULE_DUEL:
+        rules.duel = !rules.duel;
+        break;
+    case RULE_SPEED:
+        rules.speed = (rules.speed + dir + N_SPEEDS) % N_SPEEDS;
+        break;
+    case RULE_AI: {
+        int ai = rules.ai + dir;
+        if (ai < 0)
+            ai = maxAi();
+        if (ai > maxAi())
+            ai = 0;
+        rules.ai = ai;
+        break;
+    }
+    }
+    lobbyDirty = true;
+}
+
+/* Host: the rules are final. Everyone gets them, then READY. */
+static void rulesGo(void)
+{
+    if (rules.ai + memberCount() < MIN_PLAYERS) {
+        playSound(SOUND_BEP, sound);
+        message = "NEED AT LEAST TWO PLAYERS";
+        return;
+    }
+    message = NULL;
+    for (int i = 0; i < NET_MAX_NODES; ++i)
+        members[i].ready = 0;
+    wantReady = false;
+    readyDeadline = SDL_GetTicks() + READY_MS;
+    setPhase(PH_READY);
+    playSound(SOUND_BEEP, sound);
+    readyScene.parentScene = &lobbyScene;
+    enterScene(&readyScene);
+}
+
+static int logicRules(void)
+{
+    bool changed = netPump();
+    if (curScene != &rulesScene)
+        return 1;
+
+    if (enterButtonDown()) {
+        clearEnterButtons();
+        if (rulesRow == RULE_GO) {
+            rulesGo();
+        } else {
+            playSound(SOUND_BEEP, sound);
+            ruleChange(rulesRow, 1);
+        }
+        return 1;
+    }
+
+    if (menuButtonQuery(KEY_DOWN) && rulesRow < N_RULE_ROWS - 1)
+        ++rulesRow;
+    else if (menuButtonQuery(KEY_UP) && rulesRow > 0)
+        --rulesRow;
+    else if (menuButtonQuery(KEY_RIGHT) && rulesRow != RULE_GO)
+        ruleChange(rulesRow, 1);
+    else if (menuButtonQuery(KEY_LEFT) && rulesRow != RULE_GO)
+        ruleChange(rulesRow, -1);
+    else
+        return changed;
+
+    playSound(SOUND_BEEP, sound);
+    return 1;
+}
+
+static void displayRules(void)
+{
+    drawGroupTop(false);
+
+    useBottomView();
+    clearBackground(screen);
+    touchReset();
+
+    uiText(screen, FONT_MENU, "RULES", uiColBlue, 16, 8, UI_LEFT);
+
+    int y = 30;
+    for (int row = 0; row < RULE_GO; ++row, y += 30) {
+        SDL_Rect r = lobbyRowPanel(y, row == rulesRow, ruleTitle[row]);
+        switch (row) {
+        case RULE_POINTS:
+        case RULE_AI: {
+            char value[8];
+            if (row == RULE_POINTS && rules.points == 0)
+                snprintf(value, sizeof(value), "INF");
+            else
+                snprintf(value, sizeof(value), "%u",
+                         row == RULE_POINTS ? rules.points : rules.ai);
+            int cx = r.x + r.w - 70;
+            SDL_Rect less = {cx - 54 - 20, r.y, 40, r.h};
+            SDL_Rect more = {cx + 54 - 20, r.y, 40, r.h};
+            touchAdd(less, row, -1);
+            touchAdd(more, row, 1);
+            uiText(screen, FONT_MENU, "<", uiColAccent, cx - 54, r.y + 5,
+                   UI_CENTER);
+            uiText(screen, FONT_MENU, value, uiColText, cx, r.y + 5, UI_CENTER);
+            uiText(screen, FONT_MENU, ">", uiColAccent, cx + 54, r.y + 5,
+                   UI_CENTER);
+            break;
+        }
+        case RULE_HOLES:
+            drawSwitch(r, RULE_HOLES, rules.holes);
+            break;
+        case RULE_DUEL:
+            drawSwitch(r, RULE_DUEL, rules.duel);
+            break;
+        case RULE_SPEED: {
+            const char *labels[4] = {"75%", "100%", "125%", "150%"};
+            drawChoice(r, RULE_SPEED, 40, 4, labels, rules.speed, 0xF);
+            break;
+        }
+        }
+        touchAdd(r, row, TOUCH_ROW);
+    }
+
+    SDL_Rect go = {16, 182, 288, 30};
+    touchAdd(go, RULE_GO, TOUCH_ROW);
+    uiTile(screen, go, "GO", NULL, NULL, uiColGreen, rulesRow == RULE_GO, true);
+    drawMessage(216);
+
+    struct uiHint hints[] = {{"A", rulesRow == RULE_GO ? "GO" : "CHANGE", 6},
+                             {"<>", "VALUE"}, {"B", "BACK"}};
+    uiHintBar(screen, hints, 3);
+
+    if (presentFrame() == -1)
+        exit(1);
+}
+
+static void touchRules(int id, int value, bool released)
+{
+    if (!released) {
+        rulesRow = id;
+        return;
+    }
+
+    if (id == RULE_GO) {
+        rulesGo();
+    } else if (id == RULE_SPEED && value >= 0 && value < N_SPEEDS) {
+        playSound(SOUND_BEEP, sound);
+        rules.speed = value;
+        lobbyDirty = true;
+    } else if (value == -1 || value == 1) {
+        playSound(SOUND_BEEP, sound);
+        ruleChange(id, value);
+    } else {
+        playSound(SOUND_BEEP, sound);
+        ruleChange(id, 1);
+    }
+}
+
+/* ---- Waiting for the host's rules (clients) ---- */
+
+static int logicWait(void)
+{
+    netPump();
+    return curScene != &waitScene;
+}
+
+static void displayWait(void)
+{
+    drawGroupTop(false);
+
+    useBottomView();
+    clearBackground(screen);
+    touchReset();
+
+    uiText(screen, FONT_MENU, "RULES", uiColBlue, 16, 8, UI_LEFT);
+    uiText(screen, FONT_BROADCAST, "THE HOST IS CHOOSING", uiColText, 160, 100,
+           UI_CENTER);
+    uiText(screen, FONT_BROADCAST, "THE RULES...", uiColText, 160, 118,
+           UI_CENTER);
+
+    struct uiHint hints[] = {{"B", "LEAVE"}};
+    uiHintBar(screen, hints, 1);
+
+    if (presentFrame() == -1)
+        exit(1);
+}
+
+/* ---- READY ---- */
+
+static void pressReady(void)
+{
+    if (wantReady)
+        return;
+    int node = netMyNode();
+    if (node < 1 || node > NET_MAX_NODES)
+        return;
+    playSound(SOUND_BEEP, sound);
+    wantReady = true;
+    if (netIsHost()) {
+        members[node - 1].ready = 1;
+        lobbyDirty = true;
+    } else {
+        sendReady();
+        lastSend = SDL_GetTicks();
+    }
+}
+
+static int logicReady(void)
+{
+    bool changed = netPump();
+    if (curScene != &readyScene)
+        return 1;
+
+    int seconds = (readyRemaining() + 999) / 1000;
+    if (seconds != shownSeconds) {
+        shownSeconds = seconds;
+        changed = true;
+    }
+
+    if (enterButtonDown()) {
+        clearEnterButtons();
+        pressReady();
+        return 1;
+    }
+    return changed;
+}
+
+static void displayReady(void)
+{
+    drawGroupTop(true);
+
+    useBottomView();
+    clearBackground(screen);
+    touchReset();
+
+    uiText(screen, FONT_MENU, "GET READY", uiColBlue, 16, 8, UI_LEFT);
+    char line[48];
+    snprintf(line, sizeof(line), "%d", (int)((readyRemaining() + 999) / 1000));
+    uiText(screen, FONT_MENU, line, uiColAccent, 304, 8, UI_RIGHT);
+
+    if (rules.points == 0)
+        snprintf(line, sizeof(line), "NO POINT LIMIT");
+    else
+        snprintf(line, sizeof(line), "FIRST TO %u POINTS", rules.points);
+    uiText(screen, FONT_BROADCAST, line, uiColText, 16, 44, UI_LEFT);
+    snprintf(line, sizeof(line), "HOLES %s   DUEL %s", rules.holes ? "ON" : "OFF",
+             rules.duel ? "ON" : "OFF");
+    uiText(screen, FONT_BROADCAST, line, uiColText, 16, 64, UI_LEFT);
+    snprintf(line, sizeof(line), "SPEED %d%%   AI PLAYERS %u",
+             speedChoices[rules.speed % N_SPEEDS], rules.ai);
+    uiText(screen, FONT_BROADCAST, line, uiColText, 16, 84, UI_LEFT);
+
+    SDL_Rect ready = {16, 120, 288, 70};
+    touchAdd(ready, 0, TOUCH_ROW);
+    uiTile(screen, ready, wantReady ? "WAITING..." : "READY", NULL, NULL,
+           uiColGreen, !wantReady, !wantReady);
+
+    struct uiHint hints[] = {{"A", "READY"}, {"B", netIsHost() ? "CANCEL" : "LEAVE"}};
+    uiHintBar(screen, hints, 2);
+
+    if (presentFrame() == -1)
+        exit(1);
+}
+
+static void touchReady(int id, int value, bool released)
+{
+    (void)id;
+    (void)value;
+    if (released)
+        touchPressA();
+}
+
+static void leaveReady(void)
+{
+    if (netIsHost())
+        cancelToLobby();
+    else
+        leaveLobby();
+}
+
 /* ---- Setup ---- */
 
 void netMenuEnter(struct scene *parent)
@@ -693,11 +1256,19 @@ void netMenuEnter(struct scene *parent)
                                  touchBrowse, animTitle, NULL};
     lobbyScene = (struct scene){logicLobby, displayLobby, &choiceScene,
                                 touchLobby, NULL, leaveLobby};
+    rulesScene = (struct scene){logicRules, displayRules, &lobbyScene,
+                                touchRules, NULL, cancelToLobby};
+    waitScene = (struct scene){logicWait, displayWait, &choiceScene,
+                               touchLobby, NULL, leaveLobby};
+    readyScene = (struct scene){logicReady, displayReady, &choiceScene,
+                                touchReady, NULL, leaveReady};
 
     message = NULL;
     choiceSel = 0;
     lobbyFresh = true;
     lobbyMask = 0;
+    noticeUntil = 0;
+    beginCount = 0;
     if (!netInit()) {
         fprintf(stderr, "net: init failed 0x%08x\n", netLastError());
         message = "NETWORK NOT AVAILABLE";
