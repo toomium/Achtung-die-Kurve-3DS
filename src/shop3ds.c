@@ -104,6 +104,21 @@ enum itemId {
     ITEM_HEAD_HEART,
     ITEM_BLAST_SPIRAL,
     ITEM_BLAST_SNOW,
+    ITEM_THEME_BERRY,
+    ITEM_THEME_MOSS,
+    ITEM_THEME_DENIM,
+    ITEM_THEME_COCOA,
+    ITEM_THEME_MINT,
+    ITEM_FRAME_SKY,
+    ITEM_FRAME_CORAL,
+    ITEM_FRAME_LAVENDER,
+    ITEM_FRAME_TEAL,
+    ITEM_PATTERN_DIAGONAL,
+    ITEM_PATTERN_CROSSES,
+    ITEM_BLAST_FIREWORK,
+    ITEM_BLAST_RIPPLE,
+    ITEM_HEAD_SKULL,
+    ITEM_HEAD_CROWN,
     N_ITEM_IDS
 };
 
@@ -171,7 +186,22 @@ static const struct item items[N_ITEM_IDS] = {
     [ITEM_HEAD_CROSS] = {KIND_HEAD, "CROSS", {0xFF, 0xFF, 0xFF, 0}, 4},
     [ITEM_HEAD_HEART] = {KIND_HEAD, "HEART", {0xFF, 0xFF, 0xFF, 0}, 4},
     [ITEM_BLAST_SPIRAL] = {KIND_BLAST, "SPIRAL", {0x7B, 0x5C, 0xFF, 0}, 5},
-    [ITEM_BLAST_SNOW] = {KIND_BLAST, "SNOW", {0xE0, 0xF4, 0xFF, 0}, 4}
+    [ITEM_BLAST_SNOW] = {KIND_BLAST, "SNOW", {0xE0, 0xF4, 0xFF, 0}, 4},
+    [ITEM_THEME_BERRY] = {KIND_THEME, "BERRY", {0x5A, 0x10, 0x48, 0}, 3},
+    [ITEM_THEME_MOSS] = {KIND_THEME, "MOSS", {0x34, 0x40, 0x10, 0}, 3},
+    [ITEM_THEME_DENIM] = {KIND_THEME, "DENIM", {0x18, 0x30, 0x6C, 0}, 3},
+    [ITEM_THEME_COCOA] = {KIND_THEME, "COCOA", {0x4A, 0x2C, 0x1C, 0}, 3},
+    [ITEM_THEME_MINT] = {KIND_THEME, "MINT", {0x10, 0x5A, 0x44, 0}, 3},
+    [ITEM_FRAME_SKY] = {KIND_FRAME, "SKY", {0x66, 0xCC, 0xFF, 0}, 2},
+    [ITEM_FRAME_CORAL] = {KIND_FRAME, "CORAL", {0xFF, 0x6F, 0x61, 0}, 2},
+    [ITEM_FRAME_LAVENDER] = {KIND_FRAME, "LAVENDER", {0xC9, 0xA6, 0xFF, 0}, 2},
+    [ITEM_FRAME_TEAL] = {KIND_FRAME, "TEAL", {0x00, 0xD0, 0xB8, 0}, 2},
+    [ITEM_PATTERN_DIAGONAL] = {KIND_PATTERN, "DIAGONAL", {0, 0, 0, 0}, 3},
+    [ITEM_PATTERN_CROSSES] = {KIND_PATTERN, "CROSSES", {0, 0, 0, 0}, 3},
+    [ITEM_BLAST_FIREWORK] = {KIND_BLAST, "FIREWORK", {0xFF, 0x8A, 0x1A, 0}, 6},
+    [ITEM_BLAST_RIPPLE] = {KIND_BLAST, "RIPPLE", {0x66, 0xCC, 0xFF, 0}, 5},
+    [ITEM_HEAD_SKULL] = {KIND_HEAD, "SKULL", {0xFF, 0xFF, 0xFF, 0}, 4},
+    [ITEM_HEAD_CROWN] = {KIND_HEAD, "CROWN", {0xFF, 0xFF, 0xFF, 0}, 4}
 };
 #define N_ITEMS ((int)(sizeof(items) / sizeof(items[0])))
 
@@ -257,6 +287,21 @@ static void drawPattern(SDL_Surface *s, SDL_Rect area, int pattern,
     case ITEM_PATTERN_LINES:
         for (int y = area.y + 1; y < y1; y += 2)
             fill(s, area.x, y, area.w, 1, dark);
+        break;
+    case ITEM_PATTERN_DIAGONAL:
+        /* Slanted lines, one pixel per row, every 24 pixels. */
+        for (int y = area.y; y < y1; ++y) {
+            for (int x = area.x + (y - area.y) % 24; x < x1; x += 24)
+                fill(s, x, y, 1, 1, light);
+        }
+        break;
+    case ITEM_PATTERN_CROSSES:
+        for (int y = area.y + 12; y < y1; y += 24) {
+            for (int x = area.x + 12; x < x1; x += 24) {
+                fill(s, x - 2, y, 5, 1, light);
+                fill(s, x, y - 2, 1, 5, light);
+            }
+        }
         break;
     default:
         break;
@@ -388,6 +433,26 @@ static void burst(int blast, double x, double y, double dir, SDL_Color c)
                              k * 0.45 + arm * M_PI, k * 0.45 + arm * M_PI, 1, 1,
                              0.0005, c.r, c.r, c.g, c.g, c.b, c.b);
         }
+        break;
+    case ITEM_BLAST_FIREWORK: {
+        /* Three small shells, each in another color. */
+        static const SDL_Color shell[3] = {
+            {0xFF, 0x6B, 0x6B, 0}, {0xFF, 0xE0, 0x57, 0}, {0x66, 0xCC, 0xFF, 0}
+        };
+        for (int k = 0; k < 3; ++k) {
+            double ox = (k - 1) * 22, oy = (k == 1 ? -16 : 6);
+            addParticles(40, x + ox, y + oy, 0.05, 0.3, 0, all, 1, 1, 0.0006,
+                         shell[k].r, shell[k].r, shell[k].g, shell[k].g,
+                         shell[k].b, shell[k].b);
+        }
+        break;
+    }
+    case ITEM_BLAST_RIPPLE:
+        /* Three rings that run out, one after the other. */
+        for (int k = 0; k < 3; ++k)
+            addParticles(48, x, y, 0.14 + k * 0.1, 0.14 + k * 0.1, 0, all,
+                         1 - k * 0.15, 1 - k * 0.15, 0.0006, c.r, c.r, c.g,
+                         c.g, c.b, c.b);
         break;
     case ITEM_BLAST_SNOW:
         /* White flakes that sink slowly. */
@@ -521,6 +586,30 @@ static void drawHead(SDL_Surface *s, int head, int cx, int cy, int n,
             BOX(k, -k, 1, 1);
         }
         break;
+    case ITEM_HEAD_SKULL: {
+        static const char *const skull[6] = {
+            ".#####.", "#######", "##.#.##", "#######", ".#####.", ".#.#.#."
+        };
+        for (int row = 0; row < 6; ++row) {
+            for (int col = 0; col < 7; ++col) {
+                if (skull[row][col] == '#')
+                    BOX(col - 3, row - 3, 1, 1);
+            }
+        }
+        break;
+    }
+    case ITEM_HEAD_CROWN: {
+        static const char *const crown[5] = {
+            "#..#..#", "##.#.##", "#######", "#######", ".#####."
+        };
+        for (int row = 0; row < 5; ++row) {
+            for (int col = 0; col < 7; ++col) {
+                if (crown[row][col] == '#')
+                    BOX(col - 3, row - 3, 1, 1);
+            }
+        }
+        break;
+    }
     case ITEM_HEAD_HEART: {
         static const char *const heart[6] = {
             ".##.##.", "#######", "#######", ".#####.", "..###..", "...#..."
