@@ -19,8 +19,8 @@ Installing needs custom firmware. The code always leads to the newest release.
 - A lineup of up to eight players on one console (people and computer players with three skill
   levels), each with a trail color, a head marker and their own buttons.
 - Play with several consoles over Local Play (up to eight).
-- Rules: weapons off, chosen before the game, or found as items on the field; holes; solid walls or
-  a field that wraps around; duels; game speed.
+- Rules: weapons off, chosen before the game, or found as items on the field; holes; solid, wrapping, bouncing or closing walls;
+  game speed.
 - A knock-out tournament for three to eight players.
 - A shop that spends the console's Play Coins on cosmetics: playfield colors and patterns, frames,
   crash effects, more trail colors and head markers. Nothing in it changes how the game plays.

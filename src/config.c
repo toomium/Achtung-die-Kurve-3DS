@@ -362,5 +362,8 @@ void restoreSettings(void)
     }
 
     free(filename);
+#ifdef __3DS__
+    duelmode = false;   /* Only the tournament plays duels; no setting for it */
+#endif
     fclose(file);
 }

@@ -2211,7 +2211,7 @@ void startDuel(int a, int b)
  * comes back with netEndGame().
  */
 void startNetGame(const struct netSeat *seats, int n, int role,
-                  unsigned points, bool holesRule, bool duel, int speed)
+                  unsigned points, bool holesRule, int speed)
 {
     if (!slotsPacked) {
         memcpy(slotBackup, players, sizeof(players));
@@ -2228,7 +2228,7 @@ void startNetGame(const struct netSeat *seats, int n, int role,
     }
     scorecap = points;
     holes = holesRule;
-    duelmode = duel;
+    duelmode = false;
     gameSpeed = speed;
     weapons = false;
     wallMode = WALLS_SOLID;
@@ -3049,11 +3049,11 @@ void displayLobby(void)
 
 /* ---- The rules page: what a match is played with ---- */
 
-enum { RULE_POINTS, RULE_WEAPONS, RULE_HOLES, RULE_WALLS, RULE_DUEL, RULE_SPEED,
-       RULE_GO, N_RULE_ROWS };
+enum { RULE_POINTS, RULE_WEAPONS, RULE_HOLES, RULE_WALLS, RULE_SPEED, RULE_GO,
+       N_RULE_ROWS };
 
 static const char *const ruleTitle[N_RULE_ROWS] = {
-    "MAX POINTS", "WEAPONS", "HOLES", "WALLS", "DUEL MODE", "SPEED", "GO"
+    "MAX POINTS", "WEAPONS", "HOLES", "WALLS", "SPEED", "GO"
 };
 
 /* A short explanation of each rule, shown on the top screen. At most 44
@@ -3066,8 +3066,6 @@ static const char *const ruleHelp[N_RULE_ROWS][4] = {
     {"GAPS IN THE TRAILS THAT YOU CAN DRIVE", "THROUGH.", NULL, NULL},
     {"SOLID: THE WALL STOPS YOU. WRAP: YOU COME", "OUT ON THE OTHER SIDE. BOUNCE: THE WALL",
      "THROWS YOU BACK. CLOSE: AFTER 10 SECONDS", "THE WALLS COME IN."},
-    {"EXACTLY TWO PLAYERS START FACE TO FACE", "IN THE MIDDLE OF THE FIELD. WITH MORE",
-     "PLAYERS, ONLY THE FIRST TWO PLAY.", NULL},
     {"HOW FAST EVERYONE MOVES AND TURNS.", NULL, NULL, NULL},
     {"START THE MATCH.", NULL, NULL, NULL}
 };
@@ -3119,9 +3117,6 @@ static void ruleChange(int row, int dir)
         break;
     case RULE_WALLS:
         wallMode = (wallMode + dir + N_WALL_MODES) % N_WALL_MODES;
-        break;
-    case RULE_DUEL:
-        duelmode = !duelmode;
         break;
     case RULE_SPEED:
         gameSpeed = speedChoices[(speedIndex() + dir + N_SPEED_CHOICES)
@@ -3249,7 +3244,7 @@ static void drawRulesBottom(void)
 
     uiText(screen, FONT_MENU, "RULES", uiColBlue, 16, 8, UI_LEFT);
 
-    /* Six rows: a bit smaller than elsewhere, to leave room for GO. */
+    /* Five rows: a bit smaller than elsewhere, to leave room for GO. */
     lobbyRowH = 22;
     int y = 30;
     for (int row = 0; row < RULE_GO; ++row, y += 26) {
@@ -3288,9 +3283,6 @@ static void drawRulesBottom(void)
             drawChoice(r, RULE_WALLS, 52, N_WALL_MODES, labels, wallMode, 0xF);
             break;
         }
-        case RULE_DUEL:
-            drawSwitch(r, RULE_DUEL, duelmode);
-            break;
         case RULE_SPEED: {
             const char *labels[4] = {"75%", "100%", "125%", "150%"};
             drawChoice(r, RULE_SPEED, 40, 4, labels, speedIndex(), 0xF);
@@ -4049,7 +4041,6 @@ static void touchRules(int id, int value, bool released)
         }
         break;
     case RULE_HOLES:
-    case RULE_DUEL:
         playSound(SOUND_BEEP, sound);
         ruleChange(id, 1);
         break;

@@ -42,7 +42,7 @@ struct netPlayerFrame {
 
 /* Starts a match with `n` players; `role` is NET_ROLE_HOST or _CLIENT. */
 void startNetGame(const struct netSeat *seats, int n, int role,
-                  unsigned points, bool holes, bool duel, int speed);
+                  unsigned points, bool holes, int speed);
 
 /* The page the host is on, as GS_*. */
 int netSceneState(void);

@@ -27,7 +27,6 @@ struct member {
 struct netRules {
     unsigned short points;      /* 0: no limit */
     unsigned char holes;
-    unsigned char duel;
     unsigned char speed;        /* Index into speedChoices */
     unsigned char ai;           /* Computer players added to the humans */
 };

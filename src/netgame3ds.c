@@ -100,8 +100,6 @@ void netGameBegin(const struct member members[NET_MAX_NODES],
         colorUsed[c] = true;
         ++n;
     }
-    if (rules->duel && n > 2)
-        n = 2;
 
     myNode = node;
     nSeats = n;
@@ -117,7 +115,7 @@ void netGameBegin(const struct member members[NET_MAX_NODES],
         lastInputFrom[i] = SDL_GetTicks();
     role = host ? NET_ROLE_HOST : NET_ROLE_CLIENT;
 
-    startNetGame(seats, n, role, rules->points, rules->holes, rules->duel,
+    startNetGame(seats, n, role, rules->points, rules->holes,
                  speedChoices[rules->speed % N_SPEEDS]);
 }
 

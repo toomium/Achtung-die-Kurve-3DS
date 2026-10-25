@@ -298,7 +298,7 @@ const int speedChoices[N_SPEEDS] = {75, 100, 125, 150};
 
 enum { ROW_NAME, ROW_COLOR, ROW_HEAD, ROW_LEFT, ROW_RIGHT, ROW_START,
        N_ROWS };
-enum { RULE_POINTS, RULE_HOLES, RULE_DUEL, RULE_SPEED, RULE_AI, RULE_GO,
+enum { RULE_POINTS, RULE_HOLES, RULE_SPEED, RULE_AI, RULE_GO,
        N_RULE_ROWS };
 #define TOUCH_SWATCH 10
 
@@ -466,7 +466,6 @@ static void initLobby(void)
     if (netIsHost()) {
         rules.points = scorecap;
         rules.holes = holes;
-        rules.duel = duelmode;
         rules.speed = 1;
         for (int i = 0; i < N_SPEEDS; ++i) {
             if (speedChoices[i] == gameSpeed)
@@ -970,7 +969,7 @@ static void touchLobby(int id, int value, bool released)
 /* ---- The rules (host) ---- */
 
 static const char *const ruleTitle[N_RULE_ROWS] = {
-    "MAX POINTS", "HOLES", "DUEL MODE", "SPEED", "AI PLAYERS", "GO"
+    "MAX POINTS", "HOLES", "SPEED", "AI PLAYERS", "GO"
 };
 
 static int pointsIndex(void)
@@ -997,9 +996,6 @@ static void ruleChange(int row, int dir)
     case RULE_HOLES:
         rules.holes = !rules.holes;
         break;
-    case RULE_DUEL:
-        rules.duel = !rules.duel;
-        break;
     case RULE_SPEED:
         rules.speed = (rules.speed + dir + N_SPEEDS) % N_SPEEDS;
         break;
@@ -1022,11 +1018,6 @@ static void rulesGo(void)
     if (rules.ai + memberCount() < MIN_PLAYERS) {
         playSound(SOUND_BEP, sound);
         message = "NEED AT LEAST TWO PLAYERS";
-        return;
-    }
-    if (rules.duel && rules.ai + memberCount() != 2) {
-        playSound(SOUND_BEP, sound);
-        message = "DUEL NEEDS EXACTLY TWO";
         return;
     }
     message = NULL;
@@ -1108,9 +1099,6 @@ static void displayRules(void)
         }
         case RULE_HOLES:
             drawSwitch(r, RULE_HOLES, rules.holes);
-            break;
-        case RULE_DUEL:
-            drawSwitch(r, RULE_DUEL, rules.duel);
             break;
         case RULE_SPEED: {
             const char *labels[4] = {"75%", "100%", "125%", "150%"};
@@ -1243,8 +1231,7 @@ static void displayReady(void)
     else
         snprintf(line, sizeof(line), "FIRST TO %u POINTS", rules.points);
     uiText(screen, FONT_BROADCAST, line, uiColText, 16, 44, UI_LEFT);
-    snprintf(line, sizeof(line), "HOLES %s   DUEL %s", rules.holes ? "ON" : "OFF",
-             rules.duel ? "ON" : "OFF");
+    snprintf(line, sizeof(line), "HOLES %s", rules.holes ? "ON" : "OFF");
     uiText(screen, FONT_BROADCAST, line, uiColText, 16, 64, UI_LEFT);
     snprintf(line, sizeof(line), "SPEED %d%%   AI PLAYERS %u",
              speedChoices[rules.speed % N_SPEEDS], rules.ai);
