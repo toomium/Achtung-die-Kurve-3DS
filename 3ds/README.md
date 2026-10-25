@@ -1,36 +1,22 @@
-# Achtung, die Kurve! for the Nintendo 3DS (Zatacka X)
+# The Nintendo 3DS port: notes
 
-A port of [Zatacka X](https://github.com/simenheg/zatackax) to the Nintendo 3DS. The game code in
-`../src` is shared with the desktop version; 3DS-specific code is guarded by `__3DS__` or lives in this
+The main README is [../README.md](../README.md): what the game is, how to install it, and the
+features. This page is for building and working on the port.
+
+The game code in `../src` is shared with the desktop version. 3DS-only code is either guarded by
+`__3DS__` or lives in files that end in `3ds.c` (they are compiled for the 3DS only), or in this
 directory.
 
-## Download
+## Layout
 
-The newest release has a `.cia` (install it with [FBI](https://github.com/Steveice10/FBI): *Remote
-Install*, *Scan QR Code*) and a `.3dsx` (copy it to `sd:/3ds/` for the Homebrew Launcher):
-
-[![QR code of the newest release](https://github.com/toomium/Achtung-die-Kurve-3DS/releases/latest/download/qr-cia.png)](https://github.com/toomium/Achtung-die-Kurve-3DS/releases/latest)
-
-Installing needs custom firmware. The code always leads to the newest release.
-
-## What the port adds
-
-- Touch menus on the bottom screen, and a pixel-font interface on both screens.
-- A lineup of up to eight players on one console (people and computer players with three skill
-  levels), each with a trail color, a head marker and their own buttons.
-- Play with several consoles over Local Play (up to eight).
-- Rules: weapons off, chosen before the game, or found as items on the field; holes; solid, wrapping, bouncing or closing walls;
-  game speed.
-- A knock-out tournament for three to eight players.
-- A shop that spends the console's Play Coins on cosmetics: playfield colors and patterns, frames,
-  crash effects, more trail colors and head markers. Nothing in it changes how the game plays.
-- A profile with the rounds and matches won, and titles that go with them.
-
-## Requirements
-
-- [devkitPro](https://devkitpro.org/) with devkitARM and libctru
-- The 3DS portlibs `3ds-sdl`, `3ds-sdl_image`, `3ds-sdl_mixer` and `3ds-sdl_ttf` (SDL 1.2)
-- `ffmpeg` (optional): converts the sounds to a lighter format for the 3DS
+- `Makefile`: the 3DS build. It compiles `../src` and `source/`.
+- `source/platform.c`: the only file that may include `<3ds.h>`.
+- `make-romfs.sh`: puts `../data` and `assets/` together into `romfs-build/`, and converts the sounds
+  to 22.05 kHz mono if `ffmpeg` is there.
+- `assets/`: files for the 3DS only (the pixel font, the logo). They are laid over the game's data.
+- `app.rsf`, `banner.png`, `icon.png`, `tools/`: the CIA (`tools/make-cia.sh`) and the logo, banner and
+  icon (`tools/make-logo.py`, needs Pillow).
+- `screenshots/`: the pictures of the main README.
 
 ## Building
 
@@ -40,18 +26,12 @@ Installing needs custom firmware. The code always leads to the newest release.
     cd 3ds
     make
 
-This produces `zatackax.3dsx`. Run it with Homebrew on a 3DS or in an emulator such as Azahar.
+Needs the portlibs `3ds-sdl`, `3ds-sdl_image`, `3ds-sdl_mixer` and `3ds-sdl_ttf`.
 
-Settings are stored in `sdmc:/3ds/zatackax/settings.cfg`. Setting `debug = 1` there writes a log to
-`sdmc:/zatackax.log`. Sound needs the DSP firmware dumped from your own console
-(`sdmc:/3ds/dspfirm.cdc`); without it the game runs silent.
+## Notes
 
-## License
-
-GPLv3 or later, like the original. See [COPYING](../COPYING). The pixel font in `assets/fonts` is
-licensed under the SIL Open Font License, see `assets/fonts/OFL.txt`.
-
-## Tests
-
-`make -C tests` builds and runs small tests of the settings file, the computer players, the items, the
-bracket of the tournament and the statistics. They only need the SDL 1.2 headers.
+- Setting `debug = 1` in `sdmc:/3ds/zatackax/settings.cfg` writes a log to `sdmc:/zatackax.log`.
+- Without `dspfirm.cdc` the game runs silent.
+- Never write pixels as raw bytes; use `SDL_MapRGB` and `SDL_GetRGB`, the channel order of the 3DS
+  differs.
+- Close the sounds and fonts before `platformExit()`, or the exit crashes.
