@@ -4,6 +4,15 @@ A port of [Zatacka X](https://github.com/simenheg/zatackax) to the Nintendo 3DS.
 `../src` is shared with the desktop version; 3DS-specific code is guarded by `__3DS__` or lives in this
 directory.
 
+## Download
+
+The newest release has a `.cia` (install it with [FBI](https://github.com/Steveice10/FBI): *Remote
+Install*, *Scan QR Code*) and a `.3dsx` (copy it to `sd:/3ds/` for the Homebrew Launcher):
+
+[![QR code of the newest release](https://github.com/toomium/Achtung-die-Kurve-3DS/releases/latest/download/qr-cia.png)](https://github.com/toomium/Achtung-die-Kurve-3DS/releases/latest)
+
+Installing needs custom firmware. The code always leads to the newest release.
+
 ## What the port adds
 
 - Touch menus on the bottom screen, and a pixel-font interface on both screens.

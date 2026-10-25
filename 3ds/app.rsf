@@ -1,0 +1,86 @@
+# The description of the title for makerom (see tools/make-cia.sh).
+BasicInfo:
+  Title                   : "Achtung, die Kurve!"
+  CompanyCode             : "00"
+  ProductCode             : CTR-P-AKUR
+  ContentType             : Application
+  Logo                    : None
+
+RomFs:
+  RootPath                : romfs-build
+
+TitleInfo:
+  Category                : Application
+  UniqueId                : 0x5A4B5
+
+Option:
+  UseOnSD                 : true
+  FreeProductCode         : true
+  MediaFootPadding        : false
+  EnableCrypt             : false
+  EnableCompress          : true
+
+AccessControlInfo:
+  CoreVersion             : 2
+  DescVersion             : 2
+  ReleaseKernelMajor      : "02"
+  ReleaseKernelMinor      : "33"
+  UseExtSaveData          : false
+  # The settings and the log live on the SD card. The Play Coins are in a system
+  # file; whether an installed title may open it is not known yet.
+  FileSystemAccess:
+    - CategorySystemApplication
+    - DirectSdmc
+  IdealProcessor          : 0
+  AffinityMask            : 1
+  Priority                : 16
+  MaxCpu                  : 0x9E
+  DisableDebug            : false
+  EnableForceDebug        : false
+  CanWriteSharedPage      : true
+  CanUsePrivilegedPriority: false
+  CanUseNonAlphabetAndNumber: true
+  PermitMainFunctionArgument: true
+  CanShareDeviceMemory    : true
+  RunnableOnSleep         : false
+  SpecialMemoryArrange    : true
+  MemoryType              : Application
+  SystemMode              : 64MB
+  CpuSpeed                : 804MHz
+  EnableL2Cache           : true
+  CanAccessCore2          : true
+  # What the program may ask the system for: the usual list of homebrew, with
+  # nwm::UDS for Local Play and ptm:u for the pedometer.
+  ServiceAccessControl:
+    - APT:U
+    - ac:u
+    - am:net
+    - boss:U
+    - cam:u
+    - cecd:u
+    - cfg:nor
+    - cfg:u
+    - csnd:SND
+    - dsp::DSP
+    - frd:u
+    - fs:USER
+    - gsp::Gpu
+    - hid:USER
+    - http:C
+    - ir:rst
+    - ir:u
+    - ir:USER
+    - mic:u
+    - ndm:u
+    - news:u
+    - nwm::UDS
+    - ptm:u
+    - pxi:dev
+    - soc:U
+    - ssl:C
+    - y2r:u
+
+SystemControlInfo:
+  SaveDataSize            : 0KB
+  RemasterVersion         : 0
+  StackSize               : 0x40000
