@@ -126,40 +126,79 @@ static SDL_Color slotColor(int slot)
     return colors[slotConfig(slot)->color];
 }
 
-/* The bracket on the top screen: a column per round, winners in green. */
+/* The bracket on the top screen: a column per round, winners in green, the
+ * rounds to come as empty boxes, and lines from each pair to the next round. */
 static void drawBracket(void)
 {
     useTopView();
     clearBackground(screen);
 
     const int colW = 100, entryW = 94, entryH = 18, top = 14, height = 212;
-    int ys[TOUR_MAX_ROUNDS][TOUR_MAX_PLAYERS];
+    int ys[TOUR_MAX_ROUNDS + 1][TOUR_MAX_PLAYERS];
+    int count[TOUR_MAX_ROUNDS + 1];
+    int played = tourRounds();
 
-    for (int r = 0; r < tourRounds(); ++r) {
-        const struct tourRound *R = tourRoundAt(r);
-        for (int i = 0; i < R->n; ++i) {
+    /* The size of every round: those played, then the planned ones. */
+    int shown = 0;
+    for (int r = 0; r < TOUR_MAX_ROUNDS + 1; ++r) {
+        if (r < played)
+            count[r] = tourRoundAt(r)->n;
+        else if (r > 0 && count[r - 1] > 1)
+            count[r] = (count[r - 1] + 1) / 2;
+        else
+            break;
+        ++shown;
+    }
+
+    for (int r = 0; r < shown; ++r) {
+        for (int i = 0; i < count[r]; ++i) {
             if (r == 0)
-                ys[r][i] = top + (2 * i + 1) * height / (2 * R->n) - entryH / 2;
+                ys[r][i] = top + (2 * i + 1) * height / (2 * count[r])
+                    - entryH / 2;
             else
                 ys[r][i] = (ys[r - 1][2 * i]
-                            + ys[r - 1][2 * i + 1 < tourRoundAt(r - 1)->n
-                                        ? 2 * i + 1 : 2 * i]) / 2;
+                            + ys[r - 1][2 * i + 1 < count[r - 1] ? 2 * i + 1
+                                                                 : 2 * i]) / 2;
         }
     }
 
-    for (int r = 0; r < tourRounds(); ++r) {
-        const struct tourRound *R = tourRoundAt(r);
-        for (int i = 0; i < R->n; ++i) {
+    Uint32 line = uiMap(screen, uiMix(uiColPanel, uiColDim, 60));
+    for (int r = 0; r + 1 < shown; ++r) {
+        int x = 6 + r * colW + entryW;
+        for (int i = 0; i < count[r]; ++i) {
+            SDL_Rect stub = {x, ys[r][i] + entryH / 2, 3, 1};
+            SDL_FillRect(screen, &stub, line);
+        }
+        for (int p = 0; p < count[r + 1]; ++p) {
+            int a = ys[r][2 * p] + entryH / 2;
+            int b = ys[r][2 * p + 1 < count[r] ? 2 * p + 1 : 2 * p] + entryH / 2;
+            SDL_Rect bar = {x + 2, a, 1, b - a + 1};
+            SDL_FillRect(screen, &bar, line);
+            SDL_Rect out = {x + 3, ys[r + 1][p] + entryH / 2, colW - entryW - 3, 1};
+            SDL_FillRect(screen, &out, line);
+        }
+    }
+
+    for (int r = 0; r < shown; ++r) {
+        const struct tourRound *R = r < played ? tourRoundAt(r) : NULL;
+        for (int i = 0; i < count[r]; ++i) {
             SDL_Rect box = {6 + r * colW, ys[r][i], entryW, entryH};
+            if (R == NULL) {
+                uiPanel(screen, box, uiColPanel,
+                        uiMix(uiColPanel, uiColDim, 25));
+                uiText(screen, FONT_BROADCAST, "?", uiColOff, box.x + 12,
+                       box.y + 5, UI_LEFT);
+                continue;
+            }
             int slot = R->slot[i];
             int won = R->winner[i / 2];     /* The result of this pair */
             bool champ = R->n == 1;
-            bool played = !champ && won >= 0;
+            bool done = !champ && won >= 0;
             SDL_Color c = slotColor(slot);
-            bool lost = played && won != slot;
+            bool lost = done && won != slot;
             uiPanel(screen, box, uiColPanel,
                     champ ? uiColAccent
-                    : played && won == slot ? uiColGreen
+                    : done && won == slot ? uiColGreen
                     : uiMix(uiColPanel, uiColDim, 50));
             uiBall(screen, box.x + 9, box.y + 9, 3, 1, lost ? uiColOff : c);
             char name[9];
@@ -169,7 +208,7 @@ static void drawBracket(void)
         }
     }
     if (tourChampion() >= 0)
-        uiText(screen, FONT_MENU, "CHAMPION", uiColAccent, screen->w - 62, 4,
+        uiText(screen, FONT_MENU, "CHAMPION", uiColAccent, screen->w - 80, 2,
                UI_CENTER);
 }
 

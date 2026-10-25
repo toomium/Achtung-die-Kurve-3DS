@@ -10,6 +10,12 @@ enum { AI_NORMAL = 0, AI_EASY, AI_HARD, N_AI_LEVELS };
 /* The chance per frame that a computer player fires its weapon. */
 double aiWeaponProb(int level);
 
+/* How far (in pixels) a computer player of this level goes for an item. */
+double aiSeekRange(int level);
+
+/* The turn that leads towards (tx, ty): 'l', 'r', or '0' if it is ahead. */
+char aiSteerTo(double posx, double posy, double dir, double tx, double ty);
+
 char pollAi(double posx, double posy, double dir, unsigned char id,
             unsigned char *hitmap, unsigned int w, unsigned int h, int level);
 

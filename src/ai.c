@@ -24,11 +24,29 @@ static const struct {
     int front, sides, diags;
     int lapse;          /* One in this many turns is missed, 0: never */
     double weaponProb;
+    double seek;        /* How far it goes for an item */
 } levels[N_AI_LEVELS] = {
-    [AI_NORMAL] = {85, 40, 60, 0, 0.0001},
-    [AI_EASY]   = {50, 24, 36, 12, 0.00005},
-    [AI_HARD]   = {120, 56, 84, 0, 0.0003}
+    [AI_NORMAL] = {85, 40, 60, 0, 0.0001, 140},
+    [AI_EASY]   = {50, 24, 36, 12, 0.00005, 70},
+    [AI_HARD]   = {120, 56, 84, 0, 0.0003, 220}
 };
+
+double aiSeekRange(int level)
+{
+    return levels[level % N_AI_LEVELS].seek;
+}
+
+char aiSteerTo(double posx, double posy, double dir, double tx, double ty)
+{
+    double diff = atan2(ty - posy, tx - posx) - dir;
+
+    while (diff > M_PI)
+        diff -= 2 * M_PI;
+    while (diff < -M_PI)
+        diff += 2 * M_PI;
+    /* Turning right makes the direction grow. */
+    return diff > 0.15 ? 'r' : diff < -0.15 ? 'l' : '0';
+}
 
 double aiWeaponProb(int level)
 {

@@ -53,6 +53,12 @@ int main(void)
     assert(players[0].wep_count == wep_list[type].charges);
     assert(itemsCount() <= before - 1 + 1);     /* One less, or a new one */
 
+    /* The nearest one within range, for a player that goes for it. */
+    int tx, ty;
+    assert(itemsGet(0, &x, &y, &type));
+    assert(itemsNearest(x + 5, y, 20, &tx, &ty) && tx == x && ty == y);
+    assert(!itemsNearest(x + 100, y, 20, &tx, &ty));
+
     /* With a weapon in the hand, or dead, he leaves them. */
     int n = itemsCount();
     assert(n > 0 && itemsGet(0, &x, &y, &type));

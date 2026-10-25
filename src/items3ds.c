@@ -45,6 +45,23 @@ bool itemsGet(int i, int *x, int *y, int *type)
     return true;
 }
 
+bool itemsNearest(double x, double y, double range, int *tx, int *ty)
+{
+    double best = range * range;
+    bool found = false;
+
+    for (int i = 0; i < count; ++i) {
+        double dx = items[i].x - x, dy = items[i].y - y;
+        if (dx * dx + dy * dy <= best) {
+            best = dx * dx + dy * dy;
+            *tx = items[i].x;
+            *ty = items[i].y;
+            found = true;
+        }
+    }
+    return found;
+}
+
 static void dropItem(int i)
 {
     items[i] = items[--count];

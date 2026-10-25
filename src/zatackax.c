@@ -1089,6 +1089,15 @@ int logicGame(void)
 
                     char c = pollAi(p->posx, p->posy, p->dir, p->active,
                                     hitmap, WINDOW_W, WINDOW_H, p->aiLevel);
+#ifdef __3DS__
+                    /* With nothing in the way, an empty hand goes for an item. */
+                    int tx, ty;
+                    if (c == '0' && weapons && itemMode && p->wep_count == 0
+                        && p->wep_time == WEP_NONACTIVE
+                        && itemsNearest(p->posx, p->posy,
+                                        aiSeekRange(p->aiLevel), &tx, &ty))
+                        c = aiSteerTo(p->posx, p->posy, p->dir, tx, ty);
+#endif
                     if (activeTron) {
                         if (c == 'l')
                             p->dir -= M_PI_2;
@@ -2786,7 +2795,7 @@ static void drawLobbyBottom(void)
     snprintf(title, sizeof(title), "SLOT %d", lobbySlot + 1);
     uiText(screen, FONT_MENU, title, colors[p->color], 16, 8, UI_LEFT);
     if (tournamentSelected)
-        uiText(screen, FONT_BROADCAST, "TOURNAMENT (3+)", uiColAccent, 100, 14,
+        uiText(screen, FONT_BROADCAST, "TOURNAMENT (3+)", uiColAccent, 148, 14,
                UI_LEFT);
 
     /* The top screen can't be touched: arrows choose the slot. */
@@ -3367,10 +3376,8 @@ static void drawWepTop(void)
         snprintf(name, sizeof(name), "%s", p->name);
         uiText(screen, FONT_BROADCAST, name, c, cell.x + 24, cell.y + 11,
                UI_LEFT);
-        SDL_Rect icon = {cell.x + 98, cell.y + 7, 0, 0};
+        SDL_Rect icon = {cell.x + cell.w - 24, cell.y + 7, 0, 0};
         SDL_BlitSurface(smallWepIcons[p->weapon], NULL, screen, &icon);
-        uiText(screen, FONT_BROADCAST, wep_list[p->weapon].name,
-               turn ? uiColText : uiColDim, cell.x + 118, cell.y + 11, UI_LEFT);
     }
 
     struct player *p = &players[wepCursor];

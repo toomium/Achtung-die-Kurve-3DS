@@ -32,6 +32,9 @@ bool itemsUpdate(Uint32 delta, const unsigned char *hitmap, unsigned w,
  * `at` is the shake of the field. */
 void itemsDraw(SDL_Surface *s, SDL_Rect at, SDL_Surface *const icons[N_WEAPONS]);
 
+/* The nearest item within `range` pixels of (x, y). */
+bool itemsNearest(double x, double y, double range, int *tx, int *ty);
+
 /* For the test: how many items there are and where the first one is. */
 int itemsCount(void);
 bool itemsGet(int i, int *x, int *y, int *type);

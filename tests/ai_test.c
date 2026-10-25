@@ -40,5 +40,13 @@ int main(void)
     /* A weaker player uses weapons less. */
     assert(aiWeaponProb(AI_EASY) < aiWeaponProb(AI_NORMAL));
     assert(aiWeaponProb(AI_NORMAL) < aiWeaponProb(AI_HARD));
+    /* Steering towards something: right is a larger direction. */
+    assert(aiSteerTo(0, 0, 0, 50, 0) == '0');       /* Dead ahead */
+    assert(aiSteerTo(0, 0, 0, 0, 50) == 'r');       /* Below, y grows downwards */
+    assert(aiSteerTo(0, 0, 0, 0, -50) == 'l');
+    assert(aiSteerTo(0, 0, 3.0, 50, -1) == 'l');    /* Behind: the short way round */
+    assert(aiSteerTo(0, 0, 3.2, 50, -1) == 'r');
+    assert(aiSeekRange(AI_EASY) < aiSeekRange(AI_NORMAL));
+    assert(aiSeekRange(AI_NORMAL) < aiSeekRange(AI_HARD));
     return 0;
 }
