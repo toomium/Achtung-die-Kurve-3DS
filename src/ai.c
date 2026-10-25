@@ -17,9 +17,23 @@
 
 #include "ai.h"
 
-#define COWARDNESS_FRONT 85
-#define COWARDNESS_SIDES 40
-#define COWARDNESS_DIAGS 60
+#include <stdlib.h>
+
+/* How far a computer player looks ahead, per level. */
+static const struct {
+    int front, sides, diags;
+    int lapse;          /* One in this many turns is missed, 0: never */
+    double weaponProb;
+} levels[N_AI_LEVELS] = {
+    [AI_NORMAL] = {85, 40, 60, 0, 0.0001},
+    [AI_EASY]   = {50, 24, 36, 12, 0.00005},
+    [AI_HARD]   = {120, 56, 84, 0, 0.0003}
+};
+
+double aiWeaponProb(int level)
+{
+    return levels[level % N_AI_LEVELS].weaponProb;
+}
 
 /**
  * NOTE: This is only a quick doodle, and is not to be considered final!
@@ -33,11 +47,17 @@
  * @param hitmap A pointer to the whole level hitmap.
  * @param w Width of the playfield.
  * @param h Height of the playfield.
+ * @param level AI_NORMAL, AI_EASY or AI_HARD.
  * @return 'l' to turn left, 'r' to turn right, '0' else.
  */
-char pollAi(double posx, double posy, double dir, unsigned char id,
-            unsigned char *hitmap, unsigned int w, unsigned int h)
+static char look(double posx, double posy, double dir, unsigned char id,
+                 unsigned char *hitmap, unsigned int w, unsigned int h,
+                 int level)
 {
+    const int COWARDNESS_FRONT = levels[level].front;
+    const int COWARDNESS_SIDES = levels[level].sides;
+    const int COWARDNESS_DIAGS = levels[level].diags;
+
     for (int i = 0; i < COWARDNESS_FRONT; ++i) {
         int checkx, checky, result;
         if (i < COWARDNESS_DIAGS) {
@@ -96,4 +116,16 @@ char pollAi(double posx, double posy, double dir, unsigned char id,
     }
 
     return '0';
+}
+
+char pollAi(double posx, double posy, double dir, unsigned char id,
+            unsigned char *hitmap, unsigned int w, unsigned int h, int level)
+{
+    level %= N_AI_LEVELS;
+    char turn = look(posx, posy, dir, id, hitmap, w, h, level);
+
+    /* A weak player now and then does not see it coming. */
+    if (turn != '0' && levels[level].lapse && rand() % levels[level].lapse == 0)
+        return '0';
+    return turn;
 }

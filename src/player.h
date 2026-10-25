@@ -18,6 +18,7 @@ struct player {
     bool alive;
     bool invertedKeys;
     bool ai;               /* Player is AI-controlled */
+    unsigned char aiLevel; /* AI_NORMAL, AI_EASY or AI_HARD (ai.h) */
     SDL_Surface *arrow;
     double posx, initposx;
     double posy, initposy;

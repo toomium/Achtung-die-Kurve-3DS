@@ -16,6 +16,7 @@
  */
 
 #include "config.h"
+#include "ai.h"
 #include "gfx.h"
 
 #ifdef __3DS__
@@ -174,6 +175,7 @@ bool saveSettings(void)
         fprintf(file, "%dc = %d\n", i + 1, sp->color);
 #ifdef __3DS__
         fprintf(file, "%dh = %d\n", i + 1, sp->headStyle);
+        fprintf(file, "%dd = %d\n", i + 1, sp->aiLevel);
 #endif
         fprintf(file, "%da = %d\n", i + 1, sp->ai);
         fprintf(file, "%dl = %d\n", i + 1, sp->lkey);
@@ -285,6 +287,10 @@ void restoreSettings(void)
                 valid = true;
                 break;
 #ifdef __3DS__
+            case 'd': /* Skill of a computer player */
+                p->aiLevel = (unsigned)atoi(value) < N_AI_LEVELS ? atoi(value) : 0;
+                valid = true;
+                break;
             case 'h': /* Head marker from the shop */
                 p->headStyle = atoi(value);
                 valid = true;

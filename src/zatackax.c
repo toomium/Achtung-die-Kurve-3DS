@@ -1020,7 +1020,7 @@ int logicGame(void)
                 if (weapons && p->wep_time == WEP_NONACTIVE
                         && p->wep_count > 0) {
                     if (p->ai) {
-                        if (rand() / (double)RAND_MAX < AI_WEP_PROB) {
+                        if (rand() / (double)RAND_MAX < aiWeaponProb(p->aiLevel)) {
                             p->wep_time = wep_list[p->weapon].func(p, 1);
                             p->wep_count -= 1;
                             refreshGameScreen();
@@ -1072,7 +1072,7 @@ int logicGame(void)
                     */
 
                     char c = pollAi(p->posx, p->posy, p->dir, p->active,
-                                    hitmap, WINDOW_W, WINDOW_H);
+                                    hitmap, WINDOW_W, WINDOW_H, p->aiLevel);
                     if (activeTron) {
                         if (c == 'l')
                             p->dir -= M_PI_2;
@@ -2019,6 +2019,7 @@ void startNetGame(const struct netSeat *seats, int n, int role,
         p->color = seats[k].color;
         p->headStyle = seats[k].head;
         p->ai = seats[k].ai;
+        p->aiLevel = AI_NORMAL;
         p->speed = 1.0;
         p->invertedKeys = false;
         p->weapon = 0;
@@ -2343,7 +2344,8 @@ void displayModeMenu(void)
 }
 
 /* The rows below the slots. Which are shown depends on the slot. */
-enum { ROW_STATE, ROW_NAME, ROW_TRAIL, ROW_HEAD, ROW_CONTROLS, ROW_GO };
+enum { ROW_STATE, ROW_NAME, ROW_TRAIL, ROW_HEAD, ROW_CONTROLS, ROW_LEVEL,
+       ROW_GO };
 
 static int lobbyRows(int slot, int rows[6])
 {
@@ -2352,6 +2354,8 @@ static int lobbyRows(int slot, int rows[6])
     rows[n++] = ROW_NAME;
     if (slotMode[slot] != SLOT_OFF)
         rows[n++] = ROW_TRAIL;
+    if (slotMode[slot] == SLOT_AI)
+        rows[n++] = ROW_LEVEL;
     if (slotMode[slot] == SLOT_HUMAN) {
         rows[n++] = ROW_HEAD;
         rows[n++] = ROW_CONTROLS;
@@ -2531,6 +2535,18 @@ static void lobbyActivate(int row)
         playSound(SOUND_BEEP, sound);
         slotMenuOpen(SLOTMENU_HEAD, slot);
         break;
+    case ROW_LEVEL: {
+        /* Easy, normal, hard, and round again. */
+        static const unsigned char order[N_AI_LEVELS] = {AI_EASY, AI_NORMAL, AI_HARD};
+        int at = 0;
+        for (int i = 0; i < N_AI_LEVELS; ++i) {
+            if (order[i] == players[slot].aiLevel)
+                at = i;
+        }
+        players[slot].aiLevel = order[(at + 1) % N_AI_LEVELS];
+        playSound(SOUND_BEEP, sound);
+        break;
+    }
     case ROW_CONTROLS:
         playSound(SOUND_BEEP, sound);
         slotMenuOpen(SLOTMENU_CONTROLS, slot);
@@ -2731,6 +2747,18 @@ static void drawLobbyBottom(void)
                    r.y + (r.h - 16) / 2, UI_RIGHT);
             if (focused)
                 action = "OPEN";
+            break;
+        }
+        case ROW_LEVEL: {
+            static const char *const name[N_AI_LEVELS] = {"NORMAL", "EASY", "HARD"};
+            SDL_Rect r = lobbyRowPanel(y, focused, "SKILL");
+            touchAdd(r, ROW_LEVEL, TOUCH_ROW);
+            uiText(screen, FONT_MENU, name[p->aiLevel % N_AI_LEVELS],
+                   p->aiLevel == AI_HARD ? uiColRed
+                   : p->aiLevel == AI_EASY ? uiColGreen : uiColText,
+                   r.x + r.w - 10, r.y + (r.h - 16) / 2, UI_RIGHT);
+            if (focused)
+                action = "CHANGE";
             break;
         }
         case ROW_CONTROLS: {
@@ -3774,6 +3802,13 @@ static void touchWep(int id, int value, bool released)
         wepCursor = id;
 }
 
+/* Going back from the lineup keeps what was chosen there; overwriting the file
+ * in place is quick. */
+static void saveLineup(void)
+{
+    saveSettings();
+}
+
 /* The pages that can be touched. */
 static void initTouch(void)
 {
@@ -3784,6 +3819,7 @@ static void initTouch(void)
     mainMenu.touchFunc = touchMainMenu;
     modeMenu.touchFunc = touchModeMenu;
     lobbyMenu.touchFunc = touchLobby;
+    lobbyMenu.leaveFunc = saveLineup;
     slotMenusInit(&lobbyMenu);
     rulesMenu.touchFunc = touchRules;
     wepMenu.touchFunc = touchWep;

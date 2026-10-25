@@ -12,3 +12,4 @@ src/*.o
 zatackax
 .vscode/
 tests/config_test
+tests/ai_test
