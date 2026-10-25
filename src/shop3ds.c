@@ -317,6 +317,8 @@ void shopCrashBurst(double x, double y, double dir, SDL_Color c)
 {
     const double all = 2 * M_PI;
 
+    /* The effects of the shop are made of bigger sparks, easier to see. */
+    setParticleSize(shopBlast >= 0 ? 2 : 1);
     switch (shopBlast) {
     case ITEM_BLAST_CONFETTI: {
         static const SDL_Color palette[] = {
@@ -373,6 +375,7 @@ void shopCrashBurst(double x, double y, double dir, SDL_Color c)
                      1, 1, 0.0005, c.r, c.r, c.b, c.b, c.g, c.g);
         break;
     }
+    setParticleSize(1);
 }
 
 /* ---- Colors and heads ---- */

@@ -23,10 +23,14 @@ typedef struct particle {
     double life;
     double decay;
     SDL_Color color;
+    unsigned char size;     /* Side of the square it is drawn as, 0 is 1 */
 } Particle;
 
 extern SDL_Surface *particleScreen;
 extern Particle particles[MAX_PARTICLES];
+
+/* The size of the particles that are added from now on (1 is a pixel). */
+void setParticleSize(int size);
 
 void renderParticles(SDL_Surface *target);
 void updateParticles(Uint32 delta);

@@ -25,13 +25,25 @@ static unsigned int numParticles = 0;
 
 static double spinCounters[MAX_PLAYERS];
 
+static unsigned char nextSize = 1;
+
+void setParticleSize(int size)
+{
+    nextSize = size > 0 ? size : 1;
+}
+
 void renderParticle(SDL_Surface *target, Particle *p)
 {
     Uint32 *px = target->pixels;
-    unsigned int offset = target->w * (int)p->y + (int)p->x;
+    Uint32 color = SDL_MapRGB(target->format, p->color.r * p->life,
+                              p->color.g * p->life, p->color.b * p->life);
+    int size = p->size > 1 ? p->size : 1;
 
-    px[offset] = SDL_MapRGB(target->format, p->color.r * p->life,
-                            p->color.g * p->life, p->color.b * p->life);
+    /* The motion keeps (x, y) inside the surface; a bigger one is cut at the edge. */
+    for (int dy = 0; dy < size && (int)p->y + dy < target->h; ++dy) {
+        for (int dx = 0; dx < size && (int)p->x + dx < target->w; ++dx)
+            px[target->w * ((int)p->y + dy) + (int)p->x + dx] = color;
+    }
 }
 
 void addParticle(double x, double y, double vel, double angle, double life,
@@ -48,6 +60,7 @@ void addParticle(double x, double y, double vel, double angle, double life,
     particles[numParticles].life = life;
     particles[numParticles].decay = decay;
     particles[numParticles].color = color;
+    particles[numParticles].size = nextSize;
 
     numParticles++;
 }
