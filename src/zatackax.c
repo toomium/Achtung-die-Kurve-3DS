@@ -1264,6 +1264,34 @@ int logicGame(void)
     return 1;
 }
 
+#ifdef __3DS__
+/*
+ * The front of a line is always there, also when a hole is coming: the trail
+ * of a hole is wiped a moment after it was drawn, so the head would be bare.
+ * This paints the head's own place over the field, for the picture only.
+ */
+static void drawLineFronts(SDL_Surface *s, SDL_Rect at)
+{
+    const int reach = ZATA_SIZE / 2;
+
+    for (int k = 0; k < nPlayers; ++k) {
+        const struct player *p = &players[k];
+        if (!p->alive || !holes || p->holecount <= HOLE_SIZE)
+            continue;
+        Uint32 c = uiMap(s, colors[p->color]);
+        for (int j = -reach; j <= reach; ++j) {
+            for (int i = -reach; i <= reach; ++i) {
+                if (abs(i) + abs(j) > reach + 1)
+                    continue;
+                SDL_Rect px = {(int)p->posx + i + at.x, (int)p->posy + j + at.y,
+                               1, 1};
+                SDL_FillRect(s, &px, c);
+            }
+        }
+    }
+}
+#endif
+
 /**
  * Display a game round.
  */
@@ -1291,6 +1319,7 @@ void displayGame(void)
 #ifdef __3DS__
     if (weapons && itemMode)
         itemsDraw(screen, shaken, smallWepIcons);
+    drawLineFronts(screen, shaken);
     shopDrawHeads(screen, shaken);
 #endif
 
@@ -1549,6 +1578,7 @@ void displayResume(void)
 #ifdef __3DS__
     if (weapons && itemMode)
         itemsDraw(screen, (SDL_Rect){0, 0, 0, 0}, smallWepIcons);
+    drawLineFronts(screen, (SDL_Rect){0, 0, 0, 0});
     shopDrawHeads(screen, (SDL_Rect){0, 0, 0, 0});
 #endif
 
@@ -2366,6 +2396,8 @@ void netApplyFrame(int gstate, int cd, int winner,
         p->dir = f[i].dir;
         p->score = f[i].score;
         p->alive = f[i].alive;
+        /* The same test as on the host, see drawLineFronts(). */
+        p->holecount = f[i].hole ? HOLE_SIZE + 1 : 0;
         p->prevx = x;
         p->prevy = y;
     }
