@@ -12,7 +12,7 @@ out=romfs-build
 mkdir -p "$out"
 cp -ru ../data/. "$out"/
 # 3DS specific files (the pixel font): assets/ is laid over the game's data.
-cp -ru assets/. "$out"/
+cp -r assets/. "$out"/
 
 if ! command -v ffmpeg >/dev/null 2>&1; then
     echo "make-romfs.sh: ffmpeg not found, using the original (heavy) sounds" >&2
