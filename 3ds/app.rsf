@@ -4,7 +4,7 @@ BasicInfo:
   CompanyCode             : "00"
   ProductCode             : CTR-P-AKUR
   ContentType             : Application
-  Logo                    : Nintendo
+  Logo                    : Homebrew
 
 RomFs:
   RootPath                : romfs-build
