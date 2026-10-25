@@ -809,7 +809,8 @@ static Uint32 lastBurst = 0, lastTick = 0;
 static void playBurst(void)
 {
     resetParticles();
-    burst(cardItem(tab, sel), screen->w / 2, 96, M_PI_2, uiColGreen);
+    /* The top screen's width, whichever screen is in use right now. */
+    burst(cardItem(tab, sel), topShot->w / 2, 96, M_PI_2, uiColGreen);
     lastBurst = lastTick = SDL_GetTicks();
 }
 
