@@ -313,13 +313,14 @@ bool shopFrameColor(SDL_Color *color)
     return true;
 }
 
-void shopCrashBurst(double x, double y, double dir, SDL_Color c)
+/* The effect `blast` (an item, or -1 for the normal one). */
+static void burst(int blast, double x, double y, double dir, SDL_Color c)
 {
     const double all = 2 * M_PI;
 
     /* The effects of the shop are made of bigger sparks, easier to see. */
-    setParticleSize(shopBlast >= 0 ? 2 : 1);
-    switch (shopBlast) {
+    setParticleSize(blast >= 0 ? 2 : 1);
+    switch (blast) {
     case ITEM_BLAST_CONFETTI: {
         static const SDL_Color palette[] = {
             {0xFF, 0x6B, 0x6B, 0}, {0xFF, 0xC8, 0x57, 0}, {0x5F, 0xD7, 0x78, 0},
@@ -376,6 +377,11 @@ void shopCrashBurst(double x, double y, double dir, SDL_Color c)
         break;
     }
     setParticleSize(1);
+}
+
+void shopCrashBurst(double x, double y, double dir, SDL_Color c)
+{
+    burst(shopBlast, x, y, dir, c);
 }
 
 /* ---- Colors and heads ---- */
@@ -765,14 +771,8 @@ static void drawShopTop(void)
         uiCard(screen, view, bg, uiColDim, false);
         if (item >= 0)
             drawHead(screen, item, cx, view.y + view.h / 2, 5, uiColText);
-    } else {
-        SDL_Color dot = item < 0 ? uiColDim : itemColor(item);
-        for (int k = 0; k < 12; ++k) {
-            double a = k * M_PI / 6;
-            uiBall(screen, cx + (int)(cos(a) * 34), 96 + (int)(sin(a) * 26), 2,
-                   2, dot);
-        }
     }
+    /* A crash effect is shown by playing it, see animShop(). */
 
     bool owned = item < 0 || isOwned(item);
     uiText(screen, FONT_MENU, item < 0 ? "NORMAL" : itemName(item),
@@ -797,9 +797,67 @@ static void drawShopTop(void)
                messageGood ? uiColGreen : uiColRed, cx, 212, UI_CENTER);
 }
 
+/* ---- The effect, played on the top screen ---- */
+
+static SDL_Surface *topShot = NULL;     /* The top screen without the sparks */
+static Uint32 lastBurst = 0, lastTick = 0;
+
+static void playBurst(void)
+{
+    resetParticles();
+    burst(cardItem(tab, sel), screen->w / 2, 96, M_PI_2, uiColGreen);
+    lastBurst = lastTick = SDL_GetTicks();
+}
+
+/* Keeps the top screen as it is, then starts the effect of the card. */
+static void startPreview(void)
+{
+    if (topShot == NULL)
+        topShot = SDL_CreateRGBSurface(SDL_SWSURFACE, screen->w, screen->h,
+                                       screen->format->BitsPerPixel,
+                                       screen->format->Rmask,
+                                       screen->format->Gmask,
+                                       screen->format->Bmask, 0);
+    if (topShot == NULL)
+        return;
+    SDL_BlitSurface(screen, NULL, topShot, NULL);
+    playBurst();
+}
+
+/* Every frame while the effects are shown: the sparks fly, and start again. */
+static void animShop(void)
+{
+    if (tab != KIND_BLAST || topShot == NULL)
+        return;
+
+    Uint32 now = SDL_GetTicks();
+    Uint32 delta = now - lastTick;
+    lastTick = now;
+    updateParticles(delta > 35 ? 35 : delta);
+    if (!hasParticles() || now - lastBurst > 3000)
+        playBurst();
+
+    useTopView();
+    SDL_BlitSurface(topShot, NULL, screen, NULL);
+    renderParticles(particleScreen);
+    SDL_BlitSurface(particleScreen, NULL, screen, NULL);
+    useBottomView();
+    if (presentFrame() == -1)
+        exit(1);
+}
+
+static void leaveShop(void)
+{
+    resetParticles();
+    SDL_FreeSurface(topShot);
+    topShot = NULL;
+}
+
 static void displayShop(void)
 {
     drawShopTop();
+    if (tab == KIND_BLAST)
+        startPreview();
 
     useBottomView();
     clearBackground(screen);
@@ -896,7 +954,7 @@ static struct scene shopScene;
 void shopEnter(struct scene *parent)
 {
     shopScene = (struct scene){logicShop, displayShop, parent, touchShop,
-                               NULL, NULL};
+                               animShop, leaveShop};
     message = NULL;
     confirming = false;
     onTabs = false;
