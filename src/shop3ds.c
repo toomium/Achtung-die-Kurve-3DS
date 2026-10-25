@@ -633,6 +633,7 @@ static void buyItem(int item)
     } else {
         showMessage("BOUGHT! PICK IT WHEN YOU SET UP A PLAYER", true);
     }
+    playSound(SOUND_BEEEEEEP, sound);
 }
 
 static int logicShop(void)

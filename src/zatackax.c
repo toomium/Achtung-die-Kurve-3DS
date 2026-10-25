@@ -980,8 +980,10 @@ int logicGame(void)
 #endif
 
 #ifdef __3DS__
-    if (weapons && itemMode && itemsUpdate(delta, hitmap, WINDOW_W, WINDOW_H))
+    if (weapons && itemMode && itemsUpdate(delta, hitmap, WINDOW_W, WINDOW_H)) {
+        playSound(SOUND_BEEEEP, sound);
         refreshGameScreen();
+    }
 #endif
 
     /* Movement and turning follow the game speed rule, timers don't. */
