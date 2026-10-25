@@ -16,7 +16,7 @@
 /* A calm dark blue instead of black behind menus, text and the playfield. The
  * trail surface keeps black as its transparent color, see gameScreen. */
 /* The version of the 3DS port, shown on the title screen. */
-#define PORT_VERSION        "0.4.2"
+#define PORT_VERSION        "0.4.3"
 
 #define BG_R                0x1B
 #define BG_G                0x21
