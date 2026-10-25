@@ -13,13 +13,13 @@
 </div>
 
 Steer a line that never stops growing. Don't touch a wall, don't touch another line, don't touch
-your own. The last one alive scores. Up to eight players share one console, or play with
-several consoles over Local Play. Weapons, computer opponents, a tournament and a shop for
+your own. The last one alive scores. Up to three people share one console, and computer players fill the
+rest, up to eight in all. With several consoles, over Local Play, eight people can play at once. Weapons, computer opponents, a tournament and a shop for
 cosmetics (paid with the Play Coins you walk for) are on top.
 
 | | | |
 |:--:|:--:|:--:|
-| <img src="3ds/screenshots/menu.png" width="250"><br>Menu | <img src="3ds/screenshots/lineup.png" width="250"><br>Up to eight players | <img src="3ds/screenshots/game.png" width="250"><br>A round |
+| <img src="3ds/screenshots/menu.png" width="250"><br>Menu | <img src="3ds/screenshots/lineup.png" width="250"><br>Eight places | <img src="3ds/screenshots/game.png" width="250"><br>A round |
 | <img src="3ds/screenshots/weapons.png" width="250"><br>Weapons | <img src="3ds/screenshots/tournament.png" width="250"><br>Tournament | <img src="3ds/screenshots/rules.png" width="250"><br>Rules |
 | <img src="3ds/screenshots/shop.png" width="250"><br>Shop | <img src="3ds/screenshots/shop-trails.png" width="250"><br>Trail colors | <img src="3ds/screenshots/profile.png" width="250"><br>Profile and titles |
 
@@ -49,9 +49,9 @@ the game runs, but silent. Settings and what you have bought are saved in
 ## Features
 
 **The game**
-- Eight players on one console: people and computer players (three skill levels), each with
-  their own trail color, head marker and buttons.
-- Local Play with several consoles, up to eight players in all.
+- Eight places on one console: up to three people (each with their own buttons) and computer
+  players in three skill levels. Everyone has their own trail color and head marker.
+- Local Play with several consoles: up to eight players in all, computer players included.
 - Knock-out tournament for three to eight players, with a bracket.
 - Weapons: off, chosen before the game, or collected as items on the field.
 - Rules: points to win, holes in the lines, speed, and four kinds of walls: solid, wrapping,
