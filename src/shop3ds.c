@@ -175,8 +175,8 @@ static const struct item items[N_ITEM_IDS] = {
 };
 #define N_ITEMS ((int)(sizeof(items) / sizeof(items[0])))
 
-/* shopOwned has 64 bits. */
-_Static_assert(sizeof(items) / sizeof(items[0]) <= 64, "too many shop items");
+/* shopOwned has two numbers of 64 bits. */
+_Static_assert(sizeof(items) / sizeof(items[0]) <= 128, "too many shop items");
 
 /* Where the color items begin: the palette entry of the first one. */
 static int colorIndexOf(int item)
@@ -588,9 +588,19 @@ static bool spendCoins(unsigned int amount)
 
 /* ---- What is owned and in use ---- */
 
+static void setOwned(int item, bool owned)
+{
+    unsigned long long bit = 1ull << (item % 64);
+
+    if (owned)
+        shopOwned[item / 64] |= bit;
+    else
+        shopOwned[item / 64] &= ~bit;
+}
+
 static bool isOwned(int item)
 {
-    return (shopOwned >> item) & 1;
+    return (shopOwned[item / 64] >> (item % 64)) & 1;
 }
 
 /* The setting that holds what is in use for a kind of item. */
@@ -667,14 +677,14 @@ static void useCard(enum itemKind kind, int card)
  * coins are a system file and cannot be given back. */
 static void buyItem(int item)
 {
-    shopOwned |= 1ull << item;
+    setOwned(item, true);
     if (!saveSettings()) {
-        shopOwned &= ~(1ull << item);
+        setOwned(item, false);
         showMessage("COULD NOT SAVE ON THE SD CARD", false);
         return;
     }
     if (!spendCoins(items[item].price)) {
-        shopOwned &= ~(1ull << item);
+        setOwned(item, false);
         saveSettings();
         refreshCoins();
         showMessage("COULD NOT TAKE THE COINS", false);

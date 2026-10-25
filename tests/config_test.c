@@ -37,7 +37,8 @@ int main(void)
 
 #ifdef __3DS__
     /* What the shop keeps: 53 items need more than 32 bits. */
-    shopOwned = (1ull << 50) | 5;
+    shopOwned[0] = (1ull << 50) | 5;
+    shopOwned[1] = (1ull << 63) | 9;
     shopTheme = 3;
     shopFrame = 22;
     shopBlast = 12;
@@ -48,14 +49,15 @@ int main(void)
     wallMode = WALLS_BOUNCE;
     assert(saveSettings());
 
-    shopOwned = 0;
+    shopOwned[0] = shopOwned[1] = 0;
     shopTheme = shopFrame = shopBlast = -1;
     memset(&stats, 0, sizeof(stats));
     itemMode = false;
     wallMode = WALLS_SOLID;
     memset(players, 0, sizeof(players));
     restoreSettings();
-    assert(shopOwned == ((1ull << 50) | 5));
+    assert(shopOwned[0] == ((1ull << 50) | 5));
+    assert(shopOwned[1] == ((1ull << 63) | 9));
     assert(shopTheme == 3 && shopFrame == 22 && shopBlast == 12);
     assert(players[0].headStyle == 3);
     assert(players[2].color == 17);

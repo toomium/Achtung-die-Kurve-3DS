@@ -47,7 +47,7 @@ enum { WALLS_SOLID = 0, WALLS_WRAP, WALLS_BOUNCE, WALLS_CLOSE, N_WALL_MODES };
 extern int wallMode;
 extern bool shake;         /* The playfield shakes when somebody crashes (3DS) */
 #ifdef __3DS__
-extern unsigned long long shopOwned; /* Bit mask of the items bought in the shop */
+extern unsigned long long shopOwned[2]; /* Bit mask of the items bought in the shop: 0-63, 64-127 */
 extern int shopTheme;      /* The playfield theme in use, -1 for the normal one */
 extern int shopPattern;    /* The playfield pattern in use, -1 for none */
 extern int shopFrame;      /* The frame color in use, -1 for the normal one */

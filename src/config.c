@@ -42,7 +42,7 @@ bool shake = DEFAULT_SHAKE;
 int wallMode = WALLS_SOLID;
 bool debugLog = false;
 #ifdef __3DS__
-unsigned long long shopOwned = 0;
+unsigned long long shopOwned[2] = {0, 0};
 int shopTheme = -1;
 int shopFrame = -1;
 int shopPattern = -1;
@@ -163,7 +163,8 @@ bool saveSettings(void)
     fprintf(file, "scorecap = %d\n", scorecap);
     fprintf(file, "gamespeed = %d\n", gameSpeed);
 #ifdef __3DS__
-    fprintf(file, "owned = %llx\n", shopOwned);
+    fprintf(file, "owned = %llx\n", shopOwned[0]);
+    fprintf(file, "owned2 = %llx\n", shopOwned[1]);
     fprintf(file, "theme = %d\n", shopTheme);
     fprintf(file, "frame = %d\n", shopFrame);
     fprintf(file, "pattern = %d\n", shopPattern);
@@ -264,7 +265,11 @@ void restoreSettings(void)
         }
 #ifdef __3DS__
         else if (!valid && strncmp("owned", setting, STRBUF) == 0) {
-            shopOwned = strtoull(value, NULL, 16);
+            shopOwned[0] = strtoull(value, NULL, 16);
+            valid = true;
+        }
+        else if (!valid && strncmp("owned2", setting, STRBUF) == 0) {
+            shopOwned[1] = strtoull(value, NULL, 16);
             valid = true;
         }
         else if (!valid && strncmp("theme", setting, STRBUF) == 0) {
