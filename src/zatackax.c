@@ -30,6 +30,7 @@
 #include "shop3ds.h"
 #include "slotmenu3ds.h"
 #include "stats3ds.h"
+#include "items3ds.h"
 #endif
 
 static const unsigned int FPS_CAP = 100;
@@ -965,6 +966,11 @@ int logicGame(void)
     }
 #endif
 
+#ifdef __3DS__
+    if (weapons && itemMode && itemsUpdate(delta, hitmap, WINDOW_W, WINDOW_H))
+        refreshGameScreen();
+#endif
+
     /* Movement and turning follow the game speed rule, timers don't. */
     double mdelta = delta * gameSpeed / 100.0;
 
@@ -1171,6 +1177,8 @@ void displayGame(void)
 
     SDL_BlitSurface(gameScreen, NULL, screen, at);
 #ifdef __3DS__
+    if (weapons && itemMode)
+        itemsDraw(screen, shaken, smallWepIcons);
     shopDrawHeads(screen, shaken);
 #endif
 
@@ -1426,6 +1434,8 @@ void displayResume(void)
         SDL_BlitSurface(particleScreen, NULL, screen, NULL);
     SDL_BlitSurface(gameScreen, NULL, screen, NULL);
 #ifdef __3DS__
+    if (weapons && itemMode)
+        itemsDraw(screen, (SDL_Rect){0, 0, 0, 0}, smallWepIcons);
     shopDrawHeads(screen, (SDL_Rect){0, 0, 0, 0});
 #endif
 
@@ -1667,6 +1677,9 @@ void newRound(void)
 
     if (weapons)
         resetWeapons();
+#ifdef __3DS__
+    itemsReset();
+#endif
     winnerDeclared = false;
 
     for (int i = 0; i < MAX_PLAYERS; ++i) {
@@ -1727,7 +1740,12 @@ void resetWeapons(void)
         struct player *p = &players[i];
         if (p->active) {
 
+#ifdef __3DS__
+            /* With items one starts with empty hands. */
+            p->wep_count = itemMode ? 0 : wep_list[p->weapon].charges;
+#else
             p->wep_count = wep_list[p->weapon].charges;
+#endif
 
             if (p->wep_time != WEP_NONACTIVE) {
                 wep_list[p->weapon].func(p, 0);
@@ -1967,7 +1985,7 @@ static void startLocalGame(void)
 
     initPlayers2();
     newRound();
-    if (weapons) {
+    if (weapons && !itemMode) {
         assignAiWeapons();
         wepCursor = nextHuman(MAX_PLAYERS - 1, 1);
         if (wepCursor >= 0) {
@@ -2818,7 +2836,7 @@ static const char *const ruleHelp[N_RULE_ROWS][4] = {
     {"THE FIRST PLAYER TO REACH THIS SCORE", "WINS THE MATCH. INF HAS NO LIMIT, YOU",
      "PLAY UNTIL YOU QUIT.", NULL},
     {"OFF: PLAY WITHOUT WEAPONS.", "FIXED: EVERYONE PICKS ONE BEFORE THE GAME.",
-     "ITEMS: COLLECT THEM ON THE FIELD (SOON).", NULL},
+     "ITEMS: COLLECT THEM ON THE FIELD.", NULL},
     {"GAPS IN THE TRAILS THAT YOU CAN DRIVE", "THROUGH.", NULL, NULL},
     {"EXACTLY TWO PLAYERS START FACE TO FACE", "IN THE MIDDLE OF THE FIELD. WITH MORE",
      "PLAYERS, ONLY THE FIRST TWO PLAY.", NULL},
@@ -2860,9 +2878,14 @@ static void ruleChange(int row, int dir)
         scorecap = pointChoices[(pointsIndex() + dir + N_POINT_CHOICES)
                                 % N_POINT_CHOICES];
         break;
-    case RULE_WEAPONS:
-        weapons = !weapons;     /* "items" is not available yet */
+    case RULE_WEAPONS: {
+        /* Off, fixed (chosen before the game), items (found on the field). */
+        int mode = (weapons ? (itemMode ? 2 : 1) : 0) + dir + 3;
+        mode %= 3;
+        weapons = mode > 0;
+        itemMode = mode == 2;
         break;
+    }
     case RULE_HOLES:
         holes = !holes;
         break;
@@ -3018,7 +3041,8 @@ static void drawRulesBottom(void)
         }
         case RULE_WEAPONS: {
             const char *labels[3] = {"OFF", "FIXED", "ITEMS"};
-            drawChoice(r, RULE_WEAPONS, 56, 3, labels, weapons ? 1 : 0, 0x3);
+            drawChoice(r, RULE_WEAPONS, 56, 3, labels, weapons ? (itemMode ? 2 : 1) : 0,
+                       0x7);
             break;
         }
         case RULE_HOLES:
@@ -3393,7 +3417,7 @@ void drawScoreBars(int highlight, bool dimDead)
                UI_LEFT);
 
         /* The weapon: its icon (framed while it is active) and the charges left */
-        if (weapons) {
+        if (weapons && !(itemMode && p->wep_count == 0 && p->wep_time == WEP_NONACTIVE)) {
             SDL_Rect icon = {row.x + 92, row.y + 2, 0, 0};
             if (p->wep_time != WEP_NONACTIVE) {
                 SDL_Rect frame = {icon.x - 1, icon.y - 1, 18, 18};
@@ -3772,11 +3796,10 @@ static void touchRules(int id, int value, bool released)
         }
         break;
     case RULE_WEAPONS:
-        if (value == 0 || value == 1) {
+        if (value >= 0 && value <= 2) {
             playSound(SOUND_BEEP, sound);
-            weapons = value == 1;
-        } else if (value == 2) {
-            playSound(SOUND_BEP, sound);    /* "items" is not available yet */
+            weapons = value > 0;
+            itemMode = value == 2;
         }
         break;
     case RULE_HOLES:
