@@ -68,9 +68,23 @@ double aiWeaponProb(int level)
  * @param level AI_NORMAL, AI_EASY or AI_HARD.
  * @return 'l' to turn left, 'r' to turn right, '0' else.
  */
+/* What the hitmap has at a place: -1 for a wall, or (with `wrap`) what is at
+ * the place on the other side of the field. */
+static int peek(const unsigned char *hitmap, unsigned int w, unsigned int h,
+                int x, int y, bool wrap)
+{
+    if (wrap) {
+        x = (int)((x % (int)w + (int)w) % (int)w);
+        y = (int)((y % (int)h + (int)h) % (int)h);
+    } else if (x < 0 || y < 0 || (unsigned)x >= w || (unsigned)y >= h) {
+        return -1;
+    }
+    return hitmap[w * y + x];
+}
+
 static char look(double posx, double posy, double dir, unsigned char id,
-                 unsigned char *hitmap, unsigned int w, unsigned int h,
-                 int level)
+                 const unsigned char *hitmap, unsigned int w, unsigned int h,
+                 int level, bool wrap)
 {
     const int COWARDNESS_FRONT = levels[level].front;
     const int COWARDNESS_SIDES = levels[level].sides;
@@ -82,19 +96,17 @@ static char look(double posx, double posy, double dir, unsigned char id,
             /* left diagonal */
             checkx = posx + i*cos(dir - M_PI_4);
             checky = posy + i*sin(dir - M_PI_4);
-            if (checkx < 0 || checky < 0 || (unsigned)checkx >= w ||
-                    (unsigned)checky >= h)
+            result = peek(hitmap, w, h, checkx, checky, wrap);
+            if (result < 0)
                 return 'r';
-            result = hitmap[w * checky + checkx];
             if (result != id + 8 && result != id + 16 && result != 0)
                 return 'r';
             /* right diagonal */
             checkx = posx + i*cos(dir + M_PI_4);
             checky = posy + i*sin(dir + M_PI_4);
-            if (checkx < 0 || checky < 0 || (unsigned)checkx >= w ||
-                    (unsigned)checky >= h)
+            result = peek(hitmap, w, h, checkx, checky, wrap);
+            if (result < 0)
                 return 'r';
-            result = hitmap[w * checky + checkx];
             if (result != id + 8 && result != id + 16 && result != 0)
                 return 'l';
         }
@@ -102,29 +114,26 @@ static char look(double posx, double posy, double dir, unsigned char id,
             /* right side */
             checkx = posx + i*cos(dir + M_PI_2);
             checky = posy + i*sin(dir + M_PI_2);
-            if (checkx < 0 || checky < 0 || (unsigned)checkx >= w ||
-                    (unsigned)checky >= h)
+            result = peek(hitmap, w, h, checkx, checky, wrap);
+            if (result < 0)
                 return 'r';
-            result = hitmap[w * checky + checkx];
             if (result != id + 8 && result != id + 16 && result != 0)
                 return 'l';
             /* left side */
             checkx = posx + i*cos(dir - M_PI_2);
             checky = posy + i*sin(dir - M_PI_2);
-            if (checkx < 0 || checky < 0 || (unsigned)checkx >= w ||
-                    (unsigned)checky >= h)
+            result = peek(hitmap, w, h, checkx, checky, wrap);
+            if (result < 0)
                 return 'r';
-            result = hitmap[w * checky + checkx];
             if (result != id + 8 && result != id + 16 && result != 0)
                 return 'r';
         }
         /* front */
         checkx = posx + i * cos(dir);
         checky = posy + i * sin(dir);
-        if (checkx < 0 || checky < 0 || (unsigned)checkx >= w ||
-                (unsigned)checky >= h)
+        result = peek(hitmap, w, h, checkx, checky, wrap);
+        if (result < 0)
             return 'r';
-        result = hitmap[w * checky + checkx];
         if (result != id + 8 && result != id + 16 && result != 0) {
             if (result == id)
                 return 'l';
@@ -137,10 +146,11 @@ static char look(double posx, double posy, double dir, unsigned char id,
 }
 
 char pollAi(double posx, double posy, double dir, unsigned char id,
-            unsigned char *hitmap, unsigned int w, unsigned int h, int level)
+            const unsigned char *hitmap, unsigned int w, unsigned int h,
+            int level, bool wrap)
 {
     level %= N_AI_LEVELS;
-    char turn = look(posx, posy, dir, id, hitmap, w, h, level);
+    char turn = look(posx, posy, dir, id, hitmap, w, h, level, wrap);
 
     /* A weak player now and then does not see it coming. */
     if (turn != '0' && levels[level].lapse && rand() % levels[level].lapse == 0)

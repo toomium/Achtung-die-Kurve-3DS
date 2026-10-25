@@ -17,7 +17,7 @@ static char poll(int gap, int level)
     memset(hitmap, 0, sizeof(hitmap));
     for (int y = 0; y < H; ++y)
         hitmap[W * y + 100 + gap] = 2;
-    return pollAi(100, 120, 0, 1, hitmap, W, H, level);
+    return pollAi(100, 120, 0, 1, hitmap, W, H, level, false);
 }
 
 int main(void)
@@ -36,10 +36,18 @@ int main(void)
     assert(turned > 800 && turned < 1000);
     /* An empty field: nothing to do. */
     memset(hitmap, 0, sizeof(hitmap));
-    assert(pollAi(100, 120, 0, 1, hitmap, W, H, AI_HARD) == '0');
+    assert(pollAi(100, 120, 0, 1, hitmap, W, H, AI_HARD, false) == '0');
     /* A weaker player uses weapons less. */
     assert(aiWeaponProb(AI_EASY) < aiWeaponProb(AI_NORMAL));
     assert(aiWeaponProb(AI_NORMAL) < aiWeaponProb(AI_HARD));
+    /* A wall of the field is seen as a wall, unless the field wraps around. */
+    memset(hitmap, 0, sizeof(hitmap));
+    assert(pollAi(W - 10, 120, 0, 1, hitmap, W, H, AI_NORMAL, false) == 'r');
+    assert(pollAi(W - 10, 120, 0, 1, hitmap, W, H, AI_NORMAL, true) == '0');
+    /* ... and what lies on the far side counts then. */
+    hitmap[W * 120 + 5] = 2;
+    assert(pollAi(W - 10, 120, 0, 1, hitmap, W, H, AI_NORMAL, true) != '0');
+
     /* Steering towards something: right is a larger direction. */
     assert(aiSteerTo(0, 0, 0, 50, 0) == '0');       /* Dead ahead */
     assert(aiSteerTo(0, 0, 0, 0, 50) == 'r');       /* Below, y grows downwards */

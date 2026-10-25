@@ -39,6 +39,7 @@ bool particleEffects = DEFAULT_PARTICLE_EFFECTS;
 bool border = DEFAULT_BORDER;
 bool duelmode = DEFAULT_DUELMODE;
 bool shake = DEFAULT_SHAKE;
+bool wrapWalls = false;
 bool debugLog = false;
 #ifdef __3DS__
 unsigned long long shopOwned = 0;
@@ -173,6 +174,7 @@ bool saveSettings(void)
     statsFormat(counts, sizeof(counts));
     fprintf(file, "stats = %s\n", counts);
     fprintf(file, "itemmode = %d\n", itemMode);
+    fprintf(file, "wrap = %d\n", wrapWalls);
 #endif
     for (unsigned int i = 0; i < MAX_PLAYERS; ++i) {
 #ifdef __3DS__
@@ -279,6 +281,10 @@ void restoreSettings(void)
         }
         else if (!valid && strncmp("blast", setting, STRBUF) == 0) {
             shopBlast = atoi(value);
+            valid = true;
+        }
+        else if (!valid && strncmp("wrap", setting, STRBUF) == 0) {
+            wrapWalls = atoi(value) != 0;
             valid = true;
         }
         else if (!valid && strncmp("itemmode", setting, STRBUF) == 0) {

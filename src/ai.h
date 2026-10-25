@@ -2,6 +2,7 @@
 #define AI_H
 
 #include <math.h>
+#include <stdbool.h>
 #include "common.h"
 
 /* How well a computer player plays. NORMAL is 0, so a zeroed player is normal. */
@@ -16,7 +17,9 @@ double aiSeekRange(int level);
 /* The turn that leads towards (tx, ty): 'l', 'r', or '0' if it is ahead. */
 char aiSteerTo(double posx, double posy, double dir, double tx, double ty);
 
+/* With `wrap` the field has no walls: what lies beyond one edge is the far one. */
 char pollAi(double posx, double posy, double dir, unsigned char id,
-            unsigned char *hitmap, unsigned int w, unsigned int h, int level);
+            const unsigned char *hitmap, unsigned int w, unsigned int h,
+            int level, bool wrap);
 
 #endif

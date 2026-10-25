@@ -815,7 +815,7 @@ void addToHitMap(unsigned int x, unsigned int y, unsigned char player,
                                 player, xpx, ypx);
                     return;
                 }
-            } else {
+            } else if (!wrapWalls) {
                 if (olvl >= O_VERBOSE)
                     printf("Player %d hit the wall!\n", player);
                 if (olvl >= O_DEBUG)
@@ -1089,7 +1089,7 @@ int logicGame(void)
                     */
 
                     char c = pollAi(p->posx, p->posy, p->dir, p->active,
-                                    hitmap, WINDOW_W, WINDOW_H, p->aiLevel);
+                                    hitmap, WINDOW_W, WINDOW_H, p->aiLevel, wrapWalls);
 #ifdef __3DS__
                     /* With nothing in the way, an empty hand goes for an item. */
                     int tx, ty;
@@ -1132,6 +1132,18 @@ int logicGame(void)
 
                 p->posx += ZATA_SPEED * cos(p->dir) * mdelta * p->speed;
                 p->posy += ZATA_SPEED * sin(p->dir) * mdelta * p->speed;
+
+                /* Without walls one comes out on the other side. */
+                if (wrapWalls) {
+                    if (p->posx < 0)
+                        p->posx += WINDOW_W;
+                    else if (p->posx >= WINDOW_W)
+                        p->posx -= WINDOW_W;
+                    if (p->posy < 0)
+                        p->posy += WINDOW_H;
+                    else if (p->posy >= WINDOW_H)
+                        p->posy -= WINDOW_H;
+                }
 
                 curx = (unsigned int)p->posx;
                 cury = (unsigned int)p->posy;
@@ -1589,7 +1601,7 @@ static void drawFieldExtras(void)
         framed = true;
     }
 #endif
-    if (framed) {
+    if (framed && !wrapWalls) {
         SDL_Rect leftBorder = {0, 0, 1, WINDOW_H};
         SDL_Rect rightBorder = {WINDOW_W - 1, 0, WINDOW_W, WINDOW_H};
         SDL_Rect topBorder = {0, 0, WINDOW_W, 1};
@@ -1902,7 +1914,7 @@ static bool slotsPacked = false;
  * the host's. */
 static struct {
     unsigned int scorecap;
-    bool holes, duelmode, weapons;
+    bool holes, duelmode, weapons, wrap;
     int gameSpeed;
 } savedRules;
 static bool netRulesSaved = false;
@@ -1916,13 +1928,14 @@ static void saveLineupSettings(void)
     if (tournamentActive())
         tournamentSwapRules();
     unsigned cap = scorecap;
-    bool h = holes, d = duelmode, w = weapons;
+    bool h = holes, d = duelmode, w = weapons, wr = wrapWalls;
     int speed = gameSpeed;
     if (netRulesSaved) {
         scorecap = savedRules.scorecap;
         holes = savedRules.holes;
         duelmode = savedRules.duelmode;
         weapons = savedRules.weapons;
+        wrapWalls = savedRules.wrap;
         gameSpeed = savedRules.gameSpeed;
     }
     saveSettings();
@@ -1931,6 +1944,7 @@ static void saveLineupSettings(void)
         holes = h;
         duelmode = d;
         weapons = w;
+        wrapWalls = wr;
         gameSpeed = speed;
     }
     if (tournamentActive())
@@ -2006,6 +2020,7 @@ void restoreSlots(void)
         holes = savedRules.holes;
         duelmode = savedRules.duelmode;
         weapons = savedRules.weapons;
+        wrapWalls = savedRules.wrap;
         gameSpeed = savedRules.gameSpeed;
         netRulesSaved = false;
     }
@@ -2091,6 +2106,7 @@ void startNetGame(const struct netSeat *seats, int n, int role,
         savedRules.holes = holes;
         savedRules.duelmode = duelmode;
         savedRules.weapons = weapons;
+        savedRules.wrap = wrapWalls;
         savedRules.gameSpeed = gameSpeed;
         netRulesSaved = true;
     }
@@ -2099,6 +2115,7 @@ void startNetGame(const struct netSeat *seats, int n, int role,
     duelmode = duel;
     gameSpeed = speed;
     weapons = false;
+    wrapWalls = false;
 
     int remote = 0;
     for (int k = 0; k < MAX_PLAYERS; ++k) {
@@ -2749,9 +2766,11 @@ void drawLobbyTop(void)
 }
 
 /* One row of the details: a panel with a label, the value is drawn by the caller. */
+static int lobbyRowH = 26;      /* Smaller on the rules page, which has more rows */
+
 SDL_Rect lobbyRowPanel(int y, bool focused, const char *label)
 {
-    SDL_Rect r = {16, y, 288, 26};
+    SDL_Rect r = {16, y, 288, lobbyRowH};
     uiPanel(screen, r, uiColPanel,
             focused ? uiColAccent : uiMix(uiColPanel, uiColDim, 50));
     uiText(screen, FONT_BROADCAST, label, uiColDim, r.x + 10,
@@ -2906,11 +2925,11 @@ void displayLobby(void)
 
 /* ---- The rules page: what a match is played with ---- */
 
-enum { RULE_POINTS, RULE_WEAPONS, RULE_HOLES, RULE_DUEL, RULE_SPEED, RULE_GO,
-       N_RULE_ROWS };
+enum { RULE_POINTS, RULE_WEAPONS, RULE_HOLES, RULE_WALLS, RULE_DUEL, RULE_SPEED,
+       RULE_GO, N_RULE_ROWS };
 
 static const char *const ruleTitle[N_RULE_ROWS] = {
-    "MAX POINTS", "WEAPONS", "HOLES", "DUEL MODE", "SPEED", "GO"
+    "MAX POINTS", "WEAPONS", "HOLES", "WALLS", "DUEL MODE", "SPEED", "GO"
 };
 
 /* A short explanation of each rule, shown on the top screen. At most 44
@@ -2921,6 +2940,8 @@ static const char *const ruleHelp[N_RULE_ROWS][4] = {
     {"OFF: PLAY WITHOUT WEAPONS.", "FIXED: EVERYONE PICKS ONE BEFORE THE GAME.",
      "ITEMS: COLLECT THEM ON THE FIELD.", NULL},
     {"GAPS IN THE TRAILS THAT YOU CAN DRIVE", "THROUGH.", NULL, NULL},
+    {"SOLID: THE WALL STOPS YOU.", "WRAP: THERE IS NO WALL, YOU COME OUT ON",
+     "THE OTHER SIDE OF THE FIELD.", NULL},
     {"EXACTLY TWO PLAYERS START FACE TO FACE", "IN THE MIDDLE OF THE FIELD. WITH MORE",
      "PLAYERS, ONLY THE FIRST TWO PLAY.", NULL},
     {"HOW FAST EVERYONE MOVES AND TURNS.", NULL, NULL, NULL},
@@ -2971,6 +2992,9 @@ static void ruleChange(int row, int dir)
     }
     case RULE_HOLES:
         holes = !holes;
+        break;
+    case RULE_WALLS:
+        wrapWalls = !wrapWalls;
         break;
     case RULE_DUEL:
         duelmode = !duelmode;
@@ -3067,7 +3091,7 @@ void drawChoice(SDL_Rect row, int id, int w, int n, const char *labels[],
     int x = row.x + row.w - 10 - (n * w + (n - 1) * 4);
 
     for (int i = 0; i < n; ++i) {
-        SDL_Rect b = {x + i * (w + 4), row.y + 3, w, 20};
+        SDL_Rect b = {x + i * (w + 4), row.y + 3, w, row.h - 6};
         touchAdd(b, id, i);
         bool on = (enabled >> i) & 1;
         SDL_Color c = on ? uiColBlue : uiColOff;
@@ -3075,8 +3099,8 @@ void drawChoice(SDL_Rect row, int id, int w, int n, const char *labels[],
         uiPanel(screen, b, isActive ? uiMix(uiColPanel, c, 35) : uiColPanel,
                 isActive ? c : uiMix(uiColPanel, c, 30));
         uiText(screen, FONT_BROADCAST, labels[i],
-               isActive ? c : uiMix(uiColPanel, c, 55), b.x + b.w / 2, b.y + 6,
-               UI_CENTER);
+               isActive ? c : uiMix(uiColPanel, c, 55), b.x + b.w / 2,
+               b.y + (b.h - 8) / 2, UI_CENTER);
     }
 }
 
@@ -3084,7 +3108,7 @@ void drawChoice(SDL_Rect row, int id, int w, int n, const char *labels[],
 void drawSwitch(SDL_Rect row, int id, bool on)
 {
     touchAdd(row, id, 0);
-    SDL_Rect track = {row.x + row.w - 58, row.y + 5, 44, 16};
+    SDL_Rect track = {row.x + row.w - 58, row.y + (row.h - 16) / 2, 44, 16};
     SDL_Color c = on ? uiColGreen : uiColOff;
     uiPanel(screen, track, uiMix(uiColPanel, c, on ? 35 : 15), c);
     SDL_Rect knob = {track.x + (on ? 28 : 2), track.y + 2, 14, 12};
@@ -3101,8 +3125,10 @@ static void drawRulesBottom(void)
 
     uiText(screen, FONT_MENU, "RULES", uiColBlue, 16, 8, UI_LEFT);
 
-    int y = 34;
-    for (int row = 0; row < RULE_GO; ++row, y += 30) {
+    /* Six rows: a bit smaller than elsewhere, to leave room for GO. */
+    lobbyRowH = 22;
+    int y = 30;
+    for (int row = 0; row < RULE_GO; ++row, y += 26) {
         bool focused = row == rulesRow;
         SDL_Rect r = lobbyRowPanel(y, focused, ruleTitle[row]);
 
@@ -3118,11 +3144,10 @@ static void drawRulesBottom(void)
             SDL_Rect more = {cx + 54 - 20, r.y, 40, r.h};
             touchAdd(less, RULE_POINTS, -1);
             touchAdd(more, RULE_POINTS, 1);
-            uiText(screen, FONT_MENU, "<", uiColAccent, cx - 54, r.y + 5,
-                   UI_CENTER);
-            uiText(screen, FONT_MENU, value, uiColText, cx, r.y + 5, UI_CENTER);
-            uiText(screen, FONT_MENU, ">", uiColAccent, cx + 54, r.y + 5,
-                   UI_CENTER);
+            int ty = r.y + (r.h - 16) / 2;
+            uiText(screen, FONT_MENU, "<", uiColAccent, cx - 54, ty, UI_CENTER);
+            uiText(screen, FONT_MENU, value, uiColText, cx, ty, UI_CENTER);
+            uiText(screen, FONT_MENU, ">", uiColAccent, cx + 54, ty, UI_CENTER);
             break;
         }
         case RULE_WEAPONS: {
@@ -3134,6 +3159,11 @@ static void drawRulesBottom(void)
         case RULE_HOLES:
             drawSwitch(r, RULE_HOLES, holes);
             break;
+        case RULE_WALLS: {
+            const char *labels[2] = {"SOLID", "WRAP"};
+            drawChoice(r, RULE_WALLS, 56, 2, labels, wrapWalls ? 1 : 0, 0x3);
+            break;
+        }
         case RULE_DUEL:
             drawSwitch(r, RULE_DUEL, duelmode);
             break;
@@ -3146,7 +3176,9 @@ static void drawRulesBottom(void)
         touchAdd(r, row, TOUCH_ROW);
     }
 
-    SDL_Rect go = {16, 186, 288, 30};
+    lobbyRowH = 26;
+
+    SDL_Rect go = {16, 190, 288, 26};
     touchAdd(go, RULE_GO, TOUCH_ROW);
     uiTile(screen, go, "GO", NULL, NULL, uiColGreen, rulesRow == RULE_GO, true);
 
@@ -3889,6 +3921,12 @@ static void touchRules(int id, int value, bool released)
     case RULE_DUEL:
         playSound(SOUND_BEEP, sound);
         ruleChange(id, 1);
+        break;
+    case RULE_WALLS:
+        if (value == 0 || value == 1) {
+            playSound(SOUND_BEEP, sound);
+            wrapWalls = value == 1;
+        }
         break;
     case RULE_SPEED:
         if (value >= 0 && value < N_SPEED_CHOICES) {
