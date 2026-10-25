@@ -76,6 +76,11 @@ int netGameRole(void)
     return role;
 }
 
+int netGameMySeat(void)
+{
+    return mySeat;
+}
+
 /* ---- Beginning and end ---- */
 
 void netGameBegin(const struct member members[NET_MAX_NODES],

@@ -61,6 +61,9 @@ void netEndGame(void);
 
 int netGameRole(void);
 
+/* The index into players[] of the player of this console, -1 if none. */
+int netGameMySeat(void);
+
 /* Every frame of every page of a match. See NET_TICK_*. */
 int netGameTick(void);
 

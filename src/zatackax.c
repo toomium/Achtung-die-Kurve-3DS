@@ -29,6 +29,7 @@
 #include "demo3ds.h"
 #include "shop3ds.h"
 #include "slotmenu3ds.h"
+#include "stats3ds.h"
 #endif
 
 static const unsigned int FPS_CAP = 100;
@@ -1793,6 +1794,11 @@ static void drawTitleBottom(bool blink)
            screen->w / 2, 150, UI_CENTER);
     uiText(screen, FONT_BROADCAST, "A 3DS PORT OF ZATACKA X", uiColDim,
            screen->w / 2, 168, UI_CENTER);
+    char profile[48];
+    snprintf(profile, sizeof(profile), "%s  -  %u ROUNDS WON", statsTitle(),
+             stats.roundWins);
+    uiText(screen, FONT_BROADCAST, profile, uiColAccent, screen->w / 2, 194,
+           UI_CENTER);
 
     /* The version at the left, the author at the right. */
     uiText(screen, FONT_BROADCAST, "v" PORT_VERSION, uiColDim, 8,
@@ -3443,6 +3449,8 @@ void beginRoundEnd(void)
             roundWinner = i;
     }
     curScene = &roundEndScene;
+    statsRoundEnd(roundWinner);
+    saveSettings();
     if (netGameRole() == NET_ROLE_HOST)
         netGameRoundEndBegin();
     displayRoundEnd();
@@ -3507,6 +3515,12 @@ void displayRoundEnd(void)
         uiText(screen, FONT_BROADCAST, status, uiColAccent, screen->w / 2,
                banner.y + 66, UI_CENTER);
     }
+    if (statsNewTitle() != NULL) {
+        char line[40];
+        snprintf(line, sizeof(line), "NEW TITLE: %s", statsNewTitle());
+        uiText(screen, FONT_MENU, line, uiColAccent, screen->w / 2,
+               banner.y - 28, UI_CENTER);
+    }
 
     drawScoreBars(roundWinner, false);
     touchReset();
@@ -3531,6 +3545,8 @@ void beginMatchEnd(void)
 {
     curScene = &matchEndScene;
     menuMatch.choice = 0;
+    statsMatchEnd(matchWinner);
+    saveSettings();
     if (netGameRole() == NET_ROLE_HOST)
         netGameRoundEndBegin();
     displayMatchEnd();

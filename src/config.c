@@ -18,6 +18,9 @@
 #include "config.h"
 #include "ai.h"
 #include "gfx.h"
+#ifdef __3DS__
+#include "stats3ds.h"
+#endif
 
 #ifdef __3DS__
 #include "platform.h"
@@ -163,6 +166,9 @@ bool saveSettings(void)
     fprintf(file, "blast = %d\n", shopBlast);
     if (testCoins >= 0)
         fprintf(file, "testcoins = %d\n", testCoins);
+    char counts[48];
+    statsFormat(counts, sizeof(counts));
+    fprintf(file, "stats = %s\n", counts);
 #endif
     for (unsigned int i = 0; i < MAX_PLAYERS; ++i) {
 #ifdef __3DS__
@@ -266,6 +272,9 @@ void restoreSettings(void)
         else if (!valid && strncmp("blast", setting, STRBUF) == 0) {
             shopBlast = atoi(value);
             valid = true;
+        }
+        else if (!valid && strncmp("stats", setting, STRBUF) == 0) {
+            valid = statsParse(value);
         }
         else if (!valid && strncmp("testcoins", setting, STRBUF) == 0) {
             testCoins = atoi(value);

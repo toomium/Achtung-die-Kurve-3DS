@@ -13,3 +13,4 @@ zatackax
 .vscode/
 tests/config_test
 tests/ai_test
+tests/stats_test
