@@ -11,3 +11,4 @@ gmon.out
 src/*.o
 zatackax
 .vscode/
+tests/config_test
