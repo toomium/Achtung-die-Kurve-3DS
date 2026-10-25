@@ -22,32 +22,6 @@
 #define INPUT_LOST_MS   400     /* A silent console stops steering */
 #define READY_RESEND_MS 400
 
-/* One player in a snapshot. */
-struct snapPlayer {
-    float x, y, dir;
-    unsigned char alive, hole, score, killer;
-};
-
-/* The host sends this every frame during a round: all the client needs. */
-struct msgSnap {
-    unsigned char type;
-    unsigned char gstate;
-    unsigned char readyMask;    /* Bit node - 1: that console is ready */
-    unsigned char humanMask;    /* ... and who has to be */
-    unsigned short seq;
-    unsigned short countdown;
-    unsigned short readyLeft;   /* Milliseconds of the READY phase left */
-    signed char winner;         /* Match winner, -1 for none */
-    unsigned char nPlayers;
-    struct snapPlayer players[MAX_PLAYERS];
-};
-
-/* A client sends its steering to the host. */
-struct msgInput {
-    unsigned char type;
-    unsigned char left, right;
-};
-
 static int role = NET_ROLE_NONE;
 static int myNode = 0;
 static int mySeat = -1;

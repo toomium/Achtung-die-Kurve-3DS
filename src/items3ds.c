@@ -85,13 +85,17 @@ static bool freeSpot(int x, int y, const unsigned char *hitmap, unsigned w)
     return true;
 }
 
-static void spawn(const unsigned char *hitmap, unsigned w, unsigned h)
+static void spawn(const unsigned char *hitmap, unsigned w, unsigned h, int mx,
+                  int my)
 {
-    if (count >= MAX_ITEMS || w < 2 * MARGIN + 1 || h < 2 * MARGIN + 1)
+    int rangeX = (int)w - 2 * (MARGIN + mx);
+    int rangeY = (int)h - 2 * (MARGIN + my);
+
+    if (count >= MAX_ITEMS || rangeX < 1 || rangeY < 1)
         return;
     for (int tries = 0; tries < 30; ++tries) {
-        int x = MARGIN + rand() % (w - 2 * MARGIN);
-        int y = MARGIN + rand() % (h - 2 * MARGIN);
+        int x = MARGIN + mx + rand() % rangeX;
+        int y = MARGIN + my + rand() % rangeY;
         if (freeSpot(x, y, hitmap, w)) {
             items[count++] = (struct item){x, y, rand() % N_WEAPONS, 0};
             return;
@@ -100,19 +104,22 @@ static void spawn(const unsigned char *hitmap, unsigned w, unsigned h)
 }
 
 bool itemsUpdate(Uint32 delta, const unsigned char *hitmap, unsigned w,
-                 unsigned h)
+                 unsigned h, int mx, int my)
 {
     bool took = false;
 
     for (int i = 0; i < count; ++i) {
         items[i].age += delta;
-        if (items[i].age >= ITEM_LIFE)
+        /* Too old, or in what the walls have taken. */
+        if (items[i].age >= ITEM_LIFE || items[i].x < mx
+            || items[i].x >= (int)w - mx || items[i].y < my
+            || items[i].y >= (int)h - my)
             dropItem(i--);
     }
 
     spawnIn -= delta;
     if (spawnIn <= 0) {
-        spawn(hitmap, w, h);
+        spawn(hitmap, w, h, mx, my);
         spawnIn = 4000 + rand() % 4000;
     }
 

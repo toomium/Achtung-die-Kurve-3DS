@@ -7,15 +7,12 @@
 
 #include "gfx.h"
 #include "input.h"
+#include "slotmenu3ds.h"
 #include "sound.h"
 #include "stats3ds.h"
 #include "touch3ds.h"
 #include "ui3ds.h"
 #include "video.h"
-
-/* In zatackax.c. */
-SDL_Rect lobbyRowPanel(int y, bool focused, const char *label);
-void drawTitleScreen(void);
 
 static struct scene profileScene;
 

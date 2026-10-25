@@ -1022,8 +1022,13 @@ int logicGame(void)
     }
 #endif
 
+    int closeX, closeY;
+    closedIn(&closeX, &closeY);
+    const struct aiField field = {wallMode == WALLS_WRAP, closeX, closeY};
+
 #ifdef __3DS__
-    if (weapons && itemMode && itemsUpdate(delta, hitmap, WINDOW_W, WINDOW_H)) {
+    if (weapons && itemMode
+        && itemsUpdate(delta, hitmap, WINDOW_W, WINDOW_H, closeX, closeY)) {
         playSound(SOUND_BEEEEP, sound);
         refreshGameScreen();
     }
@@ -1031,10 +1036,6 @@ int logicGame(void)
 
     /* Movement and turning follow the game speed rule, timers don't. */
     double mdelta = delta * gameSpeed / 100.0;
-
-    int closeX, closeY;
-    closedIn(&closeX, &closeY);
-    const struct aiField field = {wallMode == WALLS_WRAP, closeX, closeY};
 
     for (int i = 0; i < MAX_PLAYERS; ++i) {
         if (winnerDeclared)
@@ -1596,6 +1597,8 @@ void displayResume(void)
  *
  * @return 1 if something has changed, and needs to be redrawn, 0 else.
  */
+static void saveLineupSettings(void);
+
 int logicPause(void)
 {
     if (enterButtonDown()) {
@@ -1620,7 +1623,7 @@ int logicPause(void)
                 playBGM();
             else
                 stopBGM();
-            saveSettings();
+            saveLineupSettings();   /* A tournament has other rules on loan */
             break;
         case 3:
             if (!pauseConfirm) {

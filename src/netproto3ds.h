@@ -35,6 +35,60 @@ struct netRules {
 enum { MSG_PROFILE = 1, MSG_STATE, MSG_READY, MSG_ABORT, MSG_INPUT, MSG_SNAP,
        MSG_TOLOBBY };
 
+/* ---- The messages ---- */
+
+/* One player in a snapshot. */
+struct snapPlayer {
+    float x, y, dir;
+    unsigned char alive, hole, score, killer;
+};
+
+/* The host sends this every frame during a round: all the client needs. */
+struct msgSnap {
+    unsigned char type;
+    unsigned char gstate;
+    unsigned char readyMask;    /* Bit node - 1: that console is ready */
+    unsigned char humanMask;    /* ... and who has to be */
+    unsigned short seq;
+    unsigned short countdown;
+    unsigned short readyLeft;   /* Milliseconds of the READY phase left */
+    signed char winner;         /* Match winner, -1 for none */
+    unsigned char nPlayers;
+    struct snapPlayer players[MAX_PLAYERS];
+};
+
+/* A client sends its steering to the host. */
+struct msgInput {
+    unsigned char type;
+    unsigned char left, right;
+};
+
+/* A client tells the host how it wants to appear. */
+struct msgProfile {
+    unsigned char type;
+    unsigned char color;
+    unsigned char head;
+    unsigned char title;
+    char name[PLAYER_NAME_LEN];
+};
+
+/* The host tells everyone the whole state of the group. Sent whenever
+ * something changes and now and then anyway, so a lost message does no harm. */
+struct msgState {
+    unsigned char type;
+    unsigned char phase;
+    unsigned short readyLeft;   /* Milliseconds of the READY phase that are left */
+    struct netRules rules;
+    struct member members[NET_MAX_NODES];
+};
+
+/* A message has to fit in one packet. */
+_Static_assert(sizeof(struct msgState) <= NET_MAX_PACKET, "msgState too big");
+_Static_assert(sizeof(struct msgSnap) <= NET_MAX_PACKET, "msgSnap too big");
+
+/* The size of a message as two bytes, for the group's version. */
+#define SIZE_BYTES(type) (sizeof(type) & 0xFF), (sizeof(type) >> 8)
+
 /* The speeds the host can choose from, in percent. */
 #define N_SPEEDS 4
 extern const int speedChoices[N_SPEEDS];

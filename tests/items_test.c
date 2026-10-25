@@ -16,7 +16,7 @@ static unsigned char hitmap[W * H];
 static void run(int ms)
 {
     for (int t = 0; t < ms; t += 30)
-        itemsUpdate(30, hitmap, W, H);
+        itemsUpdate(30, hitmap, W, H, 0, 0);
 }
 
 int main(void)
@@ -48,7 +48,7 @@ int main(void)
     int before = itemsCount();
     players[0].posx = x + 3;
     players[0].posy = y - 2;
-    assert(itemsUpdate(1, hitmap, W, H));
+    assert(itemsUpdate(1, hitmap, W, H, 0, 0));
     assert(players[0].weapon == type);
     assert(players[0].wep_count == wep_list[type].charges);
     assert(itemsCount() <= before - 1 + 1);     /* One less, or a new one */
@@ -64,11 +64,26 @@ int main(void)
     assert(n > 0 && itemsGet(0, &x, &y, &type));
     players[0].posx = x;
     players[0].posy = y;
-    assert(!itemsUpdate(0, hitmap, W, H));
+    assert(!itemsUpdate(0, hitmap, W, H, 0, 0));
     players[0].wep_count = 0;
     players[0].alive = false;
-    assert(!itemsUpdate(0, hitmap, W, H));
+    assert(!itemsUpdate(0, hitmap, W, H, 0, 0));
     assert(itemsCount() == n);
+
+    /* Walls that have closed in take the items that lie in the dead part, and
+     * nothing new appears there. */
+    memset(hitmap, 0, sizeof(hitmap));
+    itemsReset();
+    run(30000);
+    assert(itemsCount() > 0);
+    itemsUpdate(1, hitmap, W, H, W / 2 - 30, H / 2 - 30);
+    for (int i = 0; i < 400; ++i)
+        itemsUpdate(30, hitmap, W, H, W / 2 - 30, H / 2 - 30);
+    for (int i = 0; i < itemsCount(); ++i) {
+        assert(itemsGet(i, &x, &y, &type));
+        assert(x >= W / 2 - 30 && x < W / 2 + 30);
+        assert(y >= H / 2 - 30 && y < H / 2 + 30);
+    }
 
     /* No room for new ones, and the old ones go away by themselves. */
     memset(hitmap, 1, sizeof(hitmap));

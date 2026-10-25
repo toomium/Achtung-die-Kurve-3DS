@@ -39,9 +39,14 @@ static struct scene readyScene;
 
 static const char *message = NULL;      /* Shown in red when something failed */
 
-/* What searchers can see of a group. The last number goes up whenever a message
- * changes, so that consoles with another version stay apart. */
-static const unsigned char groupInfo[] = {'Z', 'X', 3};
+/* What searchers can see of a group: the version, and how big each message is.
+ * A message that grows changes this by itself, so consoles that have another
+ * version stay apart even if nobody raises the number. */
+static const unsigned char groupInfo[] = {
+    'Z', 'X', 4,
+    SIZE_BYTES(struct msgProfile), SIZE_BYTES(struct msgState),
+    SIZE_BYTES(struct msgSnap), SIZE_BYTES(struct msgInput)
+};
 
 static bool sameVersion(const struct netGroup *g)
 {
@@ -283,25 +288,6 @@ static void touchBrowse(int id, int value, bool released)
 /* ---- The group: lobby, rules, ready ---- */
 
 enum { PH_LOBBY, PH_RULES, PH_READY, PH_GAME };
-
-/* A client tells the host how it wants to appear. */
-struct msgProfile {
-    unsigned char type;
-    unsigned char color;
-    unsigned char head;
-    unsigned char title;
-    char name[PLAYER_NAME_LEN];
-};
-
-/* The host tells everyone the whole state of the group. Sent whenever
- * something changes and now and then anyway, so a lost message does no harm. */
-struct msgState {
-    unsigned char type;
-    unsigned char phase;
-    unsigned short readyLeft;   /* Milliseconds of the READY phase that are left */
-    struct netRules rules;
-    struct member members[NET_MAX_NODES];
-};
 
 #define RESEND_MS    1000
 #define READY_MS     30000

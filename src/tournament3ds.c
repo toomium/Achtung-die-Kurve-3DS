@@ -19,7 +19,6 @@
 /* In zatackax.c. */
 int activeSlots(int idx[MAX_PLAYERS]);
 void startDuel(int a, int b);
-void drawTitleScreen(void);
 
 #define DUELS_TO_WIN    3       /* Points a duel is played to */
 
@@ -122,7 +121,6 @@ static int logicTour(void)
 }
 
 /* The players of the lineup, as they are set up (packed or not). */
-extern struct player *slotConfig(int i);
 
 static const char *slotName(int slot)
 {

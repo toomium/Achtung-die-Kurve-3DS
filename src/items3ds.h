@@ -23,10 +23,11 @@ void itemsReset(void);
 /*
  * Lets the items age and appear, and gives them to the players that drive over
  * them. A player only takes one if he has no weapon left. Returns true if
- * somebody took one (the score page has to be drawn again).
+ * somebody took one (the score page has to be drawn again). (mx, my) is how far
+ * the walls have closed in: nothing appears there, and what is there goes.
  */
 bool itemsUpdate(Uint32 delta, const unsigned char *hitmap, unsigned w,
-                 unsigned h);
+                 unsigned h, int mx, int my);
 
 /* Draws the items over the playfield; `icons` are the small weapon icons and
  * `at` is the shake of the field. */
