@@ -46,6 +46,7 @@ extern bool shake;         /* The playfield shakes when somebody crashes (3DS) *
 #ifdef __3DS__
 extern unsigned long long shopOwned; /* Bit mask of the items bought in the shop */
 extern int shopTheme;      /* The playfield theme in use, -1 for the normal one */
+extern int shopPattern;    /* The playfield pattern in use, -1 for none */
 extern int shopFrame;      /* The frame color in use, -1 for the normal one */
 extern int shopBlast;      /* The crash effect in use, -1 for the normal one */
 extern int testCoins;      /* Play Coins for a console without them, -1 for off */

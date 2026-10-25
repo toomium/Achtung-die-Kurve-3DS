@@ -21,6 +21,7 @@
 
 enum itemKind {
     KIND_THEME,         /* The color of the playfield */
+    KIND_PATTERN,       /* A pattern over it */
     KIND_FRAME,         /* The color of the frame around it */
     KIND_BLAST,         /* The particles of a crash */
     KIND_COLOR,         /* A color for the trail, and the player */
@@ -36,54 +37,131 @@ struct item {
     int price;          /* In Play Coins */
 };
 
-/* The bit of an item in shopOwned is its index, so new items go at the end. */
-static const struct item items[] = {
-    {KIND_THEME, "NIGHT",    {0x0A, 0x12, 0x48, 0}, 3},
-    {KIND_THEME, "FOREST",   {0x06, 0x42, 0x20, 0}, 3},
-    {KIND_THEME, "WINE",     {0x52, 0x0D, 0x24, 0}, 3},
-    {KIND_THEME, "RETRO",    {0x00, 0x46, 0x14, 0}, 3},
-    {KIND_THEME, "SUNSET",   {0x60, 0x24, 0x20, 0}, 3},
-    {KIND_BLAST, "CONFETTI", {0xFF, 0x6B, 0xC8, 0}, 5},
-    {KIND_BLAST, "SPARKS",   {0xFF, 0xE0, 0x90, 0}, 5},
-    {KIND_BLAST, "EMBERS",   {0xFF, 0x7A, 0x1A, 0}, 5},
-    {KIND_BLAST, "RING",     {0x5F, 0xD7, 0x78, 0}, 5},
-    {KIND_THEME, "OCEAN",    {0x00, 0x40, 0x58, 0}, 3},
-    {KIND_THEME, "GRAPE",    {0x36, 0x16, 0x62, 0}, 3},
-    {KIND_THEME, "GOLD",     {0x50, 0x3C, 0x00, 0}, 3},
-    {KIND_BLAST, "NOVA",     {0xFF, 0xFF, 0xFF, 0}, 6},
-    {KIND_BLAST, "BLOOM",    {0xFF, 0x8A, 0xE0, 0}, 6},
-    {KIND_THEME, "TEAL",     {0x00, 0x4E, 0x48, 0}, 3},
-    {KIND_THEME, "ROSE",     {0x64, 0x1C, 0x44, 0}, 3},
-    {KIND_THEME, "INDIGO",   {0x24, 0x22, 0x6C, 0}, 3},
-    {KIND_THEME, "LIME",     {0x2C, 0x48, 0x00, 0}, 3},
-    {KIND_THEME, "PUMPKIN",  {0x6C, 0x34, 0x00, 0}, 3},
-    {KIND_THEME, "SLATE",    {0x24, 0x38, 0x50, 0}, 3},
-    {KIND_FRAME, "ICE",      {0x7F, 0xE0, 0xFF, 0}, 2},
-    {KIND_FRAME, "LIME",     {0xA0, 0xFF, 0x40, 0}, 2},
-    {KIND_FRAME, "GOLD",     {0xFF, 0xC8, 0x57, 0}, 2},
-    {KIND_FRAME, "ROSE",     {0xFF, 0x6B, 0xB5, 0}, 2},
-    {KIND_FRAME, "RED",      {0xFF, 0x40, 0x40, 0}, 2},
-    {KIND_FRAME, "VIOLET",   {0xB0, 0x7B, 0xFF, 0}, 2},
-    {KIND_FRAME, "MINT",     {0x5F, 0xFF, 0xB0, 0}, 2},
-    {KIND_FRAME, "ORANGE",   {0xFF, 0x8A, 0x1A, 0}, 2},
-    {KIND_BLAST, "BURST",    {0x5F, 0xAE, 0xFF, 0}, 5},
-    {KIND_BLAST, "SMOKE",    {0xB4, 0xB4, 0xB4, 0}, 4},
-    {KIND_BLAST, "STARS",    {0xFF, 0xE8, 0x90, 0}, 6},
-    {KIND_HEAD,  "DOT",      {0xFF, 0xFF, 0xFF, 0}, 4},
-    {KIND_HEAD,  "DIAMOND",  {0xFF, 0xFF, 0xFF, 0}, 4},
-    {KIND_HEAD,  "PLUS",     {0xFF, 0xFF, 0xFF, 0}, 4},
-    {KIND_HEAD,  "RING",     {0xFF, 0xFF, 0xFF, 0}, 4},
-    {KIND_HEAD,  "STAR",     {0xFF, 0xFF, 0xFF, 0}, 4},
-    {KIND_HEAD,  "SQUARE",   {0xFF, 0xFF, 0xFF, 0}, 4},
-    /* The colors after the first eight of the palette, in the order of gfx.c */
-    {KIND_COLOR, NULL, {0, 0, 0, 0}, 2}, {KIND_COLOR, NULL, {0, 0, 0, 0}, 2},
-    {KIND_COLOR, NULL, {0, 0, 0, 0}, 2}, {KIND_COLOR, NULL, {0, 0, 0, 0}, 2},
-    {KIND_COLOR, NULL, {0, 0, 0, 0}, 2}, {KIND_COLOR, NULL, {0, 0, 0, 0}, 2},
-    {KIND_COLOR, NULL, {0, 0, 0, 0}, 2}, {KIND_COLOR, NULL, {0, 0, 0, 0}, 2},
-    {KIND_COLOR, NULL, {0, 0, 0, 0}, 2}, {KIND_COLOR, NULL, {0, 0, 0, 0}, 2},
-    {KIND_COLOR, NULL, {0, 0, 0, 0}, 2}, {KIND_COLOR, NULL, {0, 0, 0, 0}, 2},
-    {KIND_COLOR, NULL, {0, 0, 0, 0}, 2}, {KIND_COLOR, NULL, {0, 0, 0, 0}, 2},
-    {KIND_COLOR, NULL, {0, 0, 0, 0}, 2}, {KIND_COLOR, NULL, {0, 0, 0, 0}, 2}
+/* Every item has a name here, so the table cannot drift away from the
+ * numbers: the bit of an item in shopOwned is its number. New items go at the end. */
+enum itemId {
+    ITEM_THEME_NIGHT,
+    ITEM_THEME_FOREST,
+    ITEM_THEME_WINE,
+    ITEM_THEME_RETRO,
+    ITEM_THEME_SUNSET,
+    ITEM_BLAST_CONFETTI,
+    ITEM_BLAST_SPARKS,
+    ITEM_BLAST_EMBERS,
+    ITEM_BLAST_RING,
+    ITEM_THEME_OCEAN,
+    ITEM_THEME_GRAPE,
+    ITEM_THEME_GOLD,
+    ITEM_BLAST_NOVA,
+    ITEM_BLAST_BLOOM,
+    ITEM_THEME_TEAL,
+    ITEM_THEME_ROSE,
+    ITEM_THEME_INDIGO,
+    ITEM_THEME_LIME,
+    ITEM_THEME_PUMPKIN,
+    ITEM_THEME_SLATE,
+    ITEM_FRAME_ICE,
+    ITEM_FRAME_LIME,
+    ITEM_FRAME_GOLD,
+    ITEM_FRAME_ROSE,
+    ITEM_FRAME_RED,
+    ITEM_FRAME_VIOLET,
+    ITEM_FRAME_MINT,
+    ITEM_FRAME_ORANGE,
+    ITEM_BLAST_BURST,
+    ITEM_BLAST_SMOKE,
+    ITEM_BLAST_STARS,
+    ITEM_HEAD_DOT,
+    ITEM_HEAD_DIAMOND,
+    ITEM_HEAD_PLUS,
+    ITEM_HEAD_RING,
+    ITEM_HEAD_STAR,
+    ITEM_HEAD_SQUARE,
+    ITEM_COLOR_8,
+    ITEM_COLOR_9,
+    ITEM_COLOR_10,
+    ITEM_COLOR_11,
+    ITEM_COLOR_12,
+    ITEM_COLOR_13,
+    ITEM_COLOR_14,
+    ITEM_COLOR_15,
+    ITEM_COLOR_16,
+    ITEM_COLOR_17,
+    ITEM_COLOR_18,
+    ITEM_COLOR_19,
+    ITEM_COLOR_20,
+    ITEM_COLOR_21,
+    ITEM_COLOR_22,
+    ITEM_COLOR_23,
+    ITEM_PATTERN_GRID,
+    ITEM_PATTERN_DOTS,
+    ITEM_PATTERN_STARS,
+    ITEM_PATTERN_STRIPES,
+    ITEM_PATTERN_CHECKER,
+    ITEM_PATTERN_LINES,
+    N_ITEM_IDS
+};
+
+static const struct item items[N_ITEM_IDS] = {
+    [ITEM_THEME_NIGHT] = {KIND_THEME, "NIGHT", {0x0A, 0x12, 0x48, 0}, 3},
+    [ITEM_THEME_FOREST] = {KIND_THEME, "FOREST", {0x06, 0x42, 0x20, 0}, 3},
+    [ITEM_THEME_WINE] = {KIND_THEME, "WINE", {0x52, 0x0D, 0x24, 0}, 3},
+    [ITEM_THEME_RETRO] = {KIND_THEME, "RETRO", {0x00, 0x46, 0x14, 0}, 3},
+    [ITEM_THEME_SUNSET] = {KIND_THEME, "SUNSET", {0x60, 0x24, 0x20, 0}, 3},
+    [ITEM_BLAST_CONFETTI] = {KIND_BLAST, "CONFETTI", {0xFF, 0x6B, 0xC8, 0}, 5},
+    [ITEM_BLAST_SPARKS] = {KIND_BLAST, "SPARKS", {0xFF, 0xE0, 0x90, 0}, 5},
+    [ITEM_BLAST_EMBERS] = {KIND_BLAST, "EMBERS", {0xFF, 0x7A, 0x1A, 0}, 5},
+    [ITEM_BLAST_RING] = {KIND_BLAST, "RING", {0x5F, 0xD7, 0x78, 0}, 5},
+    [ITEM_THEME_OCEAN] = {KIND_THEME, "OCEAN", {0x00, 0x40, 0x58, 0}, 3},
+    [ITEM_THEME_GRAPE] = {KIND_THEME, "GRAPE", {0x36, 0x16, 0x62, 0}, 3},
+    [ITEM_THEME_GOLD] = {KIND_THEME, "GOLD", {0x50, 0x3C, 0x00, 0}, 3},
+    [ITEM_BLAST_NOVA] = {KIND_BLAST, "NOVA", {0xFF, 0xFF, 0xFF, 0}, 6},
+    [ITEM_BLAST_BLOOM] = {KIND_BLAST, "BLOOM", {0xFF, 0x8A, 0xE0, 0}, 6},
+    [ITEM_THEME_TEAL] = {KIND_THEME, "TEAL", {0x00, 0x4E, 0x48, 0}, 3},
+    [ITEM_THEME_ROSE] = {KIND_THEME, "ROSE", {0x64, 0x1C, 0x44, 0}, 3},
+    [ITEM_THEME_INDIGO] = {KIND_THEME, "INDIGO", {0x24, 0x22, 0x6C, 0}, 3},
+    [ITEM_THEME_LIME] = {KIND_THEME, "LIME", {0x2C, 0x48, 0x00, 0}, 3},
+    [ITEM_THEME_PUMPKIN] = {KIND_THEME, "PUMPKIN", {0x6C, 0x34, 0x00, 0}, 3},
+    [ITEM_THEME_SLATE] = {KIND_THEME, "SLATE", {0x24, 0x38, 0x50, 0}, 3},
+    [ITEM_FRAME_ICE] = {KIND_FRAME, "ICE", {0x7F, 0xE0, 0xFF, 0}, 2},
+    [ITEM_FRAME_LIME] = {KIND_FRAME, "LIME", {0xA0, 0xFF, 0x40, 0}, 2},
+    [ITEM_FRAME_GOLD] = {KIND_FRAME, "GOLD", {0xFF, 0xC8, 0x57, 0}, 2},
+    [ITEM_FRAME_ROSE] = {KIND_FRAME, "ROSE", {0xFF, 0x6B, 0xB5, 0}, 2},
+    [ITEM_FRAME_RED] = {KIND_FRAME, "RED", {0xFF, 0x40, 0x40, 0}, 2},
+    [ITEM_FRAME_VIOLET] = {KIND_FRAME, "VIOLET", {0xB0, 0x7B, 0xFF, 0}, 2},
+    [ITEM_FRAME_MINT] = {KIND_FRAME, "MINT", {0x5F, 0xFF, 0xB0, 0}, 2},
+    [ITEM_FRAME_ORANGE] = {KIND_FRAME, "ORANGE", {0xFF, 0x8A, 0x1A, 0}, 2},
+    [ITEM_BLAST_BURST] = {KIND_BLAST, "BURST", {0x5F, 0xAE, 0xFF, 0}, 5},
+    [ITEM_BLAST_SMOKE] = {KIND_BLAST, "SMOKE", {0xB4, 0xB4, 0xB4, 0}, 4},
+    [ITEM_BLAST_STARS] = {KIND_BLAST, "STARS", {0xFF, 0xE8, 0x90, 0}, 6},
+    [ITEM_HEAD_DOT] = {KIND_HEAD, "DOT", {0xFF, 0xFF, 0xFF, 0}, 4},
+    [ITEM_HEAD_DIAMOND] = {KIND_HEAD, "DIAMOND", {0xFF, 0xFF, 0xFF, 0}, 4},
+    [ITEM_HEAD_PLUS] = {KIND_HEAD, "PLUS", {0xFF, 0xFF, 0xFF, 0}, 4},
+    [ITEM_HEAD_RING] = {KIND_HEAD, "RING", {0xFF, 0xFF, 0xFF, 0}, 4},
+    [ITEM_HEAD_STAR] = {KIND_HEAD, "STAR", {0xFF, 0xFF, 0xFF, 0}, 4},
+    [ITEM_HEAD_SQUARE] = {KIND_HEAD, "SQUARE", {0xFF, 0xFF, 0xFF, 0}, 4},
+    [ITEM_COLOR_8] = {KIND_COLOR, NULL, {0, 0, 0, 0}, 2},
+    [ITEM_COLOR_9] = {KIND_COLOR, NULL, {0, 0, 0, 0}, 2},
+    [ITEM_COLOR_10] = {KIND_COLOR, NULL, {0, 0, 0, 0}, 2},
+    [ITEM_COLOR_11] = {KIND_COLOR, NULL, {0, 0, 0, 0}, 2},
+    [ITEM_COLOR_12] = {KIND_COLOR, NULL, {0, 0, 0, 0}, 2},
+    [ITEM_COLOR_13] = {KIND_COLOR, NULL, {0, 0, 0, 0}, 2},
+    [ITEM_COLOR_14] = {KIND_COLOR, NULL, {0, 0, 0, 0}, 2},
+    [ITEM_COLOR_15] = {KIND_COLOR, NULL, {0, 0, 0, 0}, 2},
+    [ITEM_COLOR_16] = {KIND_COLOR, NULL, {0, 0, 0, 0}, 2},
+    [ITEM_COLOR_17] = {KIND_COLOR, NULL, {0, 0, 0, 0}, 2},
+    [ITEM_COLOR_18] = {KIND_COLOR, NULL, {0, 0, 0, 0}, 2},
+    [ITEM_COLOR_19] = {KIND_COLOR, NULL, {0, 0, 0, 0}, 2},
+    [ITEM_COLOR_20] = {KIND_COLOR, NULL, {0, 0, 0, 0}, 2},
+    [ITEM_COLOR_21] = {KIND_COLOR, NULL, {0, 0, 0, 0}, 2},
+    [ITEM_COLOR_22] = {KIND_COLOR, NULL, {0, 0, 0, 0}, 2},
+    [ITEM_COLOR_23] = {KIND_COLOR, NULL, {0, 0, 0, 0}, 2},
+    [ITEM_PATTERN_GRID] = {KIND_PATTERN, "GRID", {0, 0, 0, 0}, 3},
+    [ITEM_PATTERN_DOTS] = {KIND_PATTERN, "DOTS", {0, 0, 0, 0}, 3},
+    [ITEM_PATTERN_STARS] = {KIND_PATTERN, "STARS", {0, 0, 0, 0}, 3},
+    [ITEM_PATTERN_STRIPES] = {KIND_PATTERN, "STRIPES", {0, 0, 0, 0}, 3},
+    [ITEM_PATTERN_CHECKER] = {KIND_PATTERN, "CHECKER", {0, 0, 0, 0}, 3},
+    [ITEM_PATTERN_LINES] = {KIND_PATTERN, "LINES", {0, 0, 0, 0}, 3}
 };
 #define N_ITEMS ((int)(sizeof(items) / sizeof(items[0])))
 
@@ -111,34 +189,119 @@ static SDL_Color itemColor(int item)
                                           : items[item].color;
 }
 
-enum {
-    BLAST_CONFETTI = 5,
-    BLAST_SPARKS,
-    BLAST_EMBERS,
-    BLAST_RING,
-    BLAST_NOVA = 12,
-    BLAST_BLOOM,
-    BLAST_BURST = 28,
-    BLAST_SMOKE,
-    BLAST_STARS,
-    HEAD_DOT = 31,
-    HEAD_DIAMOND,
-    HEAD_PLUS,
-    HEAD_RING,
-    HEAD_STAR,
-    HEAD_SQUARE
-};
-
 /* ---- The effects in the game ---- */
+
+/* ---- The playfield ---- */
+
+static void fill(SDL_Surface *s, int x, int y, int w, int h, SDL_Color c)
+{
+    SDL_Rect r = {x, y, w, h};
+    SDL_FillRect(s, &r, uiMap(s, c));
+}
+
+/* A pattern over `area` of `s`, in a shade of `base` (lighter, or darker for
+ * the lines). Small rectangles only, so it is quick to draw once. */
+static void drawPattern(SDL_Surface *s, SDL_Rect area, int pattern,
+                        SDL_Color base)
+{
+    SDL_Color light = uiMix(base, (SDL_Color){255, 255, 255, 0}, 14);
+    SDL_Color faint = uiMix(base, (SDL_Color){255, 255, 255, 0}, 7);
+    SDL_Color dark = uiMix(base, (SDL_Color){0, 0, 0, 0}, 30);
+    int x1 = area.x + area.w, y1 = area.y + area.h;
+
+    switch (pattern) {
+    case ITEM_PATTERN_GRID:
+        for (int x = area.x; x < x1; x += 20)
+            fill(s, x, area.y, 1, area.h, light);
+        for (int y = area.y; y < y1; y += 20)
+            fill(s, area.x, y, area.w, 1, light);
+        break;
+    case ITEM_PATTERN_DOTS:
+        for (int y = area.y + 8; y < y1; y += 16) {
+            for (int x = area.x + 8; x < x1; x += 16)
+                fill(s, x, y, 2, 2, light);
+        }
+        break;
+    case ITEM_PATTERN_STARS: {
+        /* The same stars every time: a small generator with a fixed start. */
+        unsigned r = 12345;
+        for (int i = 0; i < area.w * area.h / 900 + 8; ++i) {
+            r = r * 1103515245u + 12345u;
+            int x = area.x + (r >> 8) % area.w;
+            r = r * 1103515245u + 12345u;
+            int y = area.y + (r >> 8) % area.h;
+            fill(s, x, y, 1 + (r >> 4) % 2, 1 + (r >> 4) % 2, light);
+        }
+        break;
+    }
+    case ITEM_PATTERN_STRIPES:
+        for (int y = area.y; y < y1; y += 16)
+            fill(s, area.x, y, area.w, 8, faint);
+        break;
+    case ITEM_PATTERN_CHECKER:
+        for (int y = area.y; y < y1; y += 24) {
+            for (int x = area.x + ((y - area.y) / 24 % 2) * 24; x < x1; x += 48)
+                fill(s, x, y, 24, 24, faint);
+        }
+        break;
+    case ITEM_PATTERN_LINES:
+        for (int y = area.y + 1; y < y1; y += 2)
+            fill(s, area.x, y, area.w, 1, dark);
+        break;
+    default:
+        break;
+    }
+}
+
+static bool patternInUse(void)
+{
+    return shopPattern >= 0 && shopPattern < N_ITEMS
+        && items[shopPattern].kind == KIND_PATTERN;
+}
+
+static bool themeInUse(void)
+{
+    return shopTheme >= 0 && shopTheme < N_ITEMS
+        && items[shopTheme].kind == KIND_THEME;
+}
 
 void shopClearPlayfield(SDL_Surface *s)
 {
-    if (shopTheme < 0 || shopTheme >= N_ITEMS
-        || items[shopTheme].kind != KIND_THEME) {
-        clearBackground(s);
+    /* The ground with its pattern is drawn once and copied on every frame. */
+    static SDL_Surface *ground = NULL;
+    static int groundFor = -1;
+
+    SDL_Color base = themeInUse() ? itemColor(shopTheme)
+                                  : (SDL_Color){BG_R, BG_G, BG_B, 0};
+
+    if (!patternInUse()) {
+        if (ground != NULL) {
+            SDL_FreeSurface(ground);
+            ground = NULL;
+        }
+        if (themeInUse())
+            SDL_FillRect(s, &s->clip_rect, uiMap(s, base));
+        else
+            clearBackground(s);
         return;
     }
-    SDL_FillRect(s, &s->clip_rect, uiMap(s, itemColor(shopTheme)));
+
+    int key = (shopTheme + 1) * 100 + shopPattern;
+    if (ground == NULL || groundFor != key || ground->w != s->w
+        || ground->h != s->h) {
+        SDL_FreeSurface(ground);
+        ground = SDL_CreateRGBSurface(SDL_SWSURFACE, s->w, s->h,
+                                      s->format->BitsPerPixel, s->format->Rmask,
+                                      s->format->Gmask, s->format->Bmask, 0);
+        if (ground == NULL) {
+            clearBackground(s);
+            return;
+        }
+        SDL_FillRect(ground, NULL, uiMap(ground, base));
+        drawPattern(ground, (SDL_Rect){0, 0, s->w, s->h}, shopPattern, base);
+        groundFor = key;
+    }
+    SDL_BlitSurface(ground, NULL, s, NULL);
 }
 
 bool shopFrameColor(SDL_Color *color)
@@ -155,7 +318,7 @@ void shopCrashBurst(double x, double y, double dir, SDL_Color c)
     const double all = 2 * M_PI;
 
     switch (shopBlast) {
-    case BLAST_CONFETTI: {
+    case ITEM_BLAST_CONFETTI: {
         static const SDL_Color palette[] = {
             {0xFF, 0x6B, 0x6B, 0}, {0xFF, 0xC8, 0x57, 0}, {0x5F, 0xD7, 0x78, 0},
             {0x5F, 0xAE, 0xFF, 0}, {0xC8, 0x7B, 0xFF, 0}, {0xFF, 0xFF, 0xFF, 0}
@@ -166,41 +329,41 @@ void shopCrashBurst(double x, double y, double dir, SDL_Color c)
                          palette[i].b, palette[i].b);
         break;
     }
-    case BLAST_SPARKS:
+    case ITEM_BLAST_SPARKS:
         addParticles(70, x, y, 0.1, 0.7, 0, all, 0.6, 1, 0.0009,
                      255, 255, 200, 255, 80, 200);
         break;
-    case BLAST_EMBERS:
+    case ITEM_BLAST_EMBERS:
         addParticles(60, x, y, 0.03, 0.25, -M_PI_2 - 0.9, -M_PI_2 + 0.9, 1, 1,
                      0.0004, 255, 255, 80, 170, 0, 30);
         break;
-    case BLAST_RING:
+    case ITEM_BLAST_RING:
         addParticles(60, x, y, 0.28, 0.30, 0, all, 1, 1, 0.0006,
                      c.r, c.r, c.g, c.g, c.b, c.b);
         break;
-    case BLAST_NOVA:
+    case ITEM_BLAST_NOVA:
         /* A white ring runs ahead of one in the player's color. */
         addParticles(70, x, y, 0.45, 0.47, 0, all, 1, 1, 0.0008,
                      255, 255, 255, 255, 255, 255);
         addParticles(70, x, y, 0.25, 0.27, 0, all, 1, 1, 0.0006,
                      c.r, c.r, c.g, c.g, c.b, c.b);
         break;
-    case BLAST_BLOOM:
+    case ITEM_BLAST_BLOOM:
         addParticles(120, x, y, 0.01, 0.16, 0, all, 1, 1, 0.0003,
                      c.r, 255, c.g, 255, c.b, 255);
         break;
-    case BLAST_BURST:
+    case ITEM_BLAST_BURST:
         /* Eight thin rays. */
         for (int k = 0; k < 8; ++k)
             addParticles(10, x, y, 0.1, 0.5, k * M_PI_4 - 0.04,
                          k * M_PI_4 + 0.04, 1, 1, 0.0006,
                          c.r, c.r, c.g, c.g, c.b, c.b);
         break;
-    case BLAST_SMOKE:
+    case ITEM_BLAST_SMOKE:
         addParticles(90, x, y, 0.01, 0.12, 0, all, 1, 1, 0.00025,
                      150, 200, 150, 200, 150, 200);
         break;
-    case BLAST_STARS:
+    case ITEM_BLAST_STARS:
         addParticles(40, x, y, 0.02, 0.2, 0, all, 1, 1, 0.0002,
                      255, 255, 220, 255, 120, 220);
         break;
@@ -277,25 +440,25 @@ static void drawHead(SDL_Surface *s, int head, int cx, int cy, int n,
         SDL_FillRect(s, &r_, c); } while (0)
 
     switch (head) {
-    case HEAD_DOT:
+    case ITEM_HEAD_DOT:
         BOX(-1, -1, 3, 3);
         break;
-    case HEAD_DIAMOND:
+    case ITEM_HEAD_DIAMOND:
         BOX(0, -2, 1, 5);
         BOX(-1, -1, 3, 3);
         BOX(-2, 0, 5, 1);
         break;
-    case HEAD_PLUS:
+    case ITEM_HEAD_PLUS:
         BOX(-3, 0, 7, 1);
         BOX(0, -3, 1, 7);
         break;
-    case HEAD_RING:
+    case ITEM_HEAD_RING:
         BOX(-3, -3, 7, 1);
         BOX(-3, 3, 7, 1);
         BOX(-3, -2, 1, 5);
         BOX(3, -2, 1, 5);
         break;
-    case HEAD_STAR:
+    case ITEM_HEAD_STAR:
         BOX(-2, 0, 5, 1);
         BOX(0, -2, 1, 5);
         BOX(-2, -2, 1, 1);
@@ -303,7 +466,7 @@ static void drawHead(SDL_Surface *s, int head, int cx, int cy, int n,
         BOX(-2, 2, 1, 1);
         BOX(2, 2, 1, 1);
         break;
-    case HEAD_SQUARE:
+    case ITEM_HEAD_SQUARE:
         BOX(-2, -2, 5, 5);
         break;
     default:
@@ -369,6 +532,7 @@ static bool isOwned(int item)
 static int *inUse(enum itemKind kind)
 {
     return kind == KIND_THEME ? &shopTheme
+         : kind == KIND_PATTERN ? &shopPattern
          : kind == KIND_FRAME ? &shopFrame : &shopBlast;
 }
 
@@ -410,7 +574,7 @@ static bool cardEquipped(enum itemKind kind, int card)
 #define CARD_COLS   4
 #define TOUCH_TAB   1000        /* Touch ids from here on are the tabs */
 
-static const char *const tabName[N_KINDS] = {"FIELD", "FRAME", "CRASH",
+static const char *const tabName[N_KINDS] = {"FIELD", "BG", "FRAME", "CRASH",
                                              "TRAIL", "HEAD"};
 
 static enum itemKind tab = KIND_THEME;
@@ -544,7 +708,7 @@ static SDL_Rect cardRect(int card)
 
 static SDL_Rect tabRect(int kind)
 {
-    return (SDL_Rect){8 + kind * 62, 8, 58, 24};
+    return (SDL_Rect){4 + kind * 53, 8, 51, 24};
 }
 
 /* The top screen: the coins, and the selected card big. */
@@ -575,6 +739,12 @@ static void drawShopTop(void)
     /* What it looks like. */
     if (tab == KIND_THEME) {
         uiCard(screen, view, item < 0 ? bg : itemColor(item), uiColDim, false);
+    } else if (tab == KIND_PATTERN) {
+        SDL_Color ground = themeInUse() ? itemColor(shopTheme) : bg;
+        uiCard(screen, view, ground, uiColDim, false);
+        if (item >= 0)
+            drawPattern(screen, (SDL_Rect){view.x + 2, view.y + 2, view.w - 4,
+                                           view.h - 4}, item, ground);
     } else if (tab == KIND_FRAME) {
         SDL_Color frame = item < 0 ? uiColText : itemColor(item);
         uiCard(screen, view, bg, frame, false);

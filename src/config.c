@@ -44,6 +44,7 @@ bool debugLog = false;
 unsigned long long shopOwned = 0;
 int shopTheme = -1;
 int shopFrame = -1;
+int shopPattern = -1;
 int shopBlast = -1;
 int testCoins = -1;
 #endif
@@ -164,6 +165,7 @@ bool saveSettings(void)
     fprintf(file, "owned = %llx\n", shopOwned);
     fprintf(file, "theme = %d\n", shopTheme);
     fprintf(file, "frame = %d\n", shopFrame);
+    fprintf(file, "pattern = %d\n", shopPattern);
     fprintf(file, "blast = %d\n", shopBlast);
     if (testCoins >= 0)
         fprintf(file, "testcoins = %d\n", testCoins);
@@ -269,6 +271,10 @@ void restoreSettings(void)
         }
         else if (!valid && strncmp("frame", setting, STRBUF) == 0) {
             shopFrame = atoi(value);
+            valid = true;
+        }
+        else if (!valid && strncmp("pattern", setting, STRBUF) == 0) {
+            shopPattern = atoi(value);
             valid = true;
         }
         else if (!valid && strncmp("blast", setting, STRBUF) == 0) {
