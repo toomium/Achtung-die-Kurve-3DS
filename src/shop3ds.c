@@ -99,6 +99,11 @@ enum itemId {
     ITEM_PATTERN_STRIPES,
     ITEM_PATTERN_CHECKER,
     ITEM_PATTERN_LINES,
+    ITEM_HEAD_ARROW,
+    ITEM_HEAD_CROSS,
+    ITEM_HEAD_HEART,
+    ITEM_BLAST_SPIRAL,
+    ITEM_BLAST_SNOW,
     N_ITEM_IDS
 };
 
@@ -161,7 +166,12 @@ static const struct item items[N_ITEM_IDS] = {
     [ITEM_PATTERN_STARS] = {KIND_PATTERN, "STARS", {0, 0, 0, 0}, 3},
     [ITEM_PATTERN_STRIPES] = {KIND_PATTERN, "STRIPES", {0, 0, 0, 0}, 3},
     [ITEM_PATTERN_CHECKER] = {KIND_PATTERN, "CHECKER", {0, 0, 0, 0}, 3},
-    [ITEM_PATTERN_LINES] = {KIND_PATTERN, "LINES", {0, 0, 0, 0}, 3}
+    [ITEM_PATTERN_LINES] = {KIND_PATTERN, "LINES", {0, 0, 0, 0}, 3},
+    [ITEM_HEAD_ARROW] = {KIND_HEAD, "ARROW", {0xFF, 0xFF, 0xFF, 0}, 4},
+    [ITEM_HEAD_CROSS] = {KIND_HEAD, "CROSS", {0xFF, 0xFF, 0xFF, 0}, 4},
+    [ITEM_HEAD_HEART] = {KIND_HEAD, "HEART", {0xFF, 0xFF, 0xFF, 0}, 4},
+    [ITEM_BLAST_SPIRAL] = {KIND_BLAST, "SPIRAL", {0x7B, 0x5C, 0xFF, 0}, 5},
+    [ITEM_BLAST_SNOW] = {KIND_BLAST, "SNOW", {0xE0, 0xF4, 0xFF, 0}, 4}
 };
 #define N_ITEMS ((int)(sizeof(items) / sizeof(items[0])))
 
@@ -370,6 +380,20 @@ static void burst(int blast, double x, double y, double dir, SDL_Color c)
         addParticles(40, x, y, 0.02, 0.2, 0, all, 1, 1, 0.0002,
                      255, 255, 220, 255, 120, 220);
         break;
+    case ITEM_BLAST_SPIRAL:
+        /* Two arms: every spark a bit faster and further round than the last. */
+        for (int k = 0; k < 36; ++k) {
+            for (int arm = 0; arm < 2; ++arm)
+                addParticles(1, x, y, 0.06 + k * 0.007, 0.06 + k * 0.007,
+                             k * 0.45 + arm * M_PI, k * 0.45 + arm * M_PI, 1, 1,
+                             0.0005, c.r, c.r, c.g, c.g, c.b, c.b);
+        }
+        break;
+    case ITEM_BLAST_SNOW:
+        /* White flakes that sink slowly. */
+        addParticles(90, x, y, 0.01, 0.07, M_PI_2 - 1.2, M_PI_2 + 1.2, 1, 1,
+                     0.0002, 220, 255, 235, 255, 255, 255);
+        break;
     default:
         /* The normal burst, a cone behind the player. */
         addParticles(50, x, y, 0, 0.5, dir + M_PI - M_PI_4, dir + M_PI + M_PI_4,
@@ -441,7 +465,7 @@ const char *shopHeadName(unsigned char style)
 
 /* A head marker of the given size around (cx, cy): `n` is one step. */
 static void drawHead(SDL_Surface *s, int head, int cx, int cy, int n,
-                     SDL_Color color)
+                     double dir, SDL_Color color)
 {
     Uint32 c = uiMap(s, color);
 #define BOX(dx, dy, w, h) do { \
@@ -478,6 +502,37 @@ static void drawHead(SDL_Surface *s, int head, int cx, int cy, int n,
     case ITEM_HEAD_SQUARE:
         BOX(-2, -2, 5, 5);
         break;
+    case ITEM_HEAD_ARROW:
+        /* Points where the player is heading: the tip, and two wings. */
+        for (int k = 0; k < 5; ++k) {
+            double along = 5 - k * 1.5, aside = k * 1.1;
+            for (int side = -1; side <= 1; side += 2) {
+                int px = (int)(cos(dir) * along - sin(dir) * aside * side
+                               + (along < 0 ? -0.5 : 0.5));
+                int py = (int)(sin(dir) * along + cos(dir) * aside * side
+                               + (along < 0 ? -0.5 : 0.5));
+                BOX(px, py, 1, 1);
+            }
+        }
+        break;
+    case ITEM_HEAD_CROSS:
+        for (int k = -2; k <= 2; ++k) {
+            BOX(k, k, 1, 1);
+            BOX(k, -k, 1, 1);
+        }
+        break;
+    case ITEM_HEAD_HEART: {
+        static const char *const heart[6] = {
+            ".##.##.", "#######", "#######", ".#####.", "..###..", "...#..."
+        };
+        for (int row = 0; row < 6; ++row) {
+            for (int col = 0; col < 7; ++col) {
+                if (heart[row][col] == '#')
+                    BOX(col - 3, row - 3, 1, 1);
+            }
+        }
+        break;
+    }
     default:
         break;
     }
@@ -488,7 +543,7 @@ void shopDrawHeadIcon(SDL_Surface *s, unsigned char style, int cx, int cy,
                       int scale, SDL_Color color)
 {
     if (style > 0)
-        drawHead(s, style - 1, cx, cy, scale, color);
+        drawHead(s, style - 1, cx, cy, scale, 0, color);
 }
 
 void shopDrawHeads(SDL_Surface *s, SDL_Rect at)
@@ -499,7 +554,7 @@ void shopDrawHeads(SDL_Surface *s, SDL_Rect at)
             continue;
         /* Twice the size of the trail, so that it can be seen from afar. */
         drawHead(s, p->headStyle - 1, (int)p->posx + at.x, (int)p->posy + at.y,
-                 2, uiMix(colors[p->color], (SDL_Color){255, 255, 255, 0}, 60));
+                 2, p->dir, uiMix(colors[p->color], (SDL_Color){255, 255, 255, 0}, 60));
     }
 }
 
@@ -775,7 +830,7 @@ static void drawShopTop(void)
     } else if (tab == KIND_HEAD) {
         uiCard(screen, view, bg, uiColDim, false);
         if (item >= 0)
-            drawHead(screen, item, cx, view.y + view.h / 2, 5, uiColText);
+            drawHead(screen, item, cx, view.y + view.h / 2, 5, 0, uiColText);
     }
     /* A crash effect is shown by playing it, see animShop(). */
 
