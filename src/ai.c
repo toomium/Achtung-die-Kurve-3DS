@@ -71,12 +71,13 @@ double aiWeaponProb(int level)
 /* What the hitmap has at a place: -1 for a wall, or (with `wrap`) what is at
  * the place on the other side of the field. */
 static int peek(const unsigned char *hitmap, unsigned int w, unsigned int h,
-                int x, int y, bool wrap)
+                int x, int y, const struct aiField *f)
 {
-    if (wrap) {
+    if (f->wrap) {
         x = (int)((x % (int)w + (int)w) % (int)w);
         y = (int)((y % (int)h + (int)h) % (int)h);
-    } else if (x < 0 || y < 0 || (unsigned)x >= w || (unsigned)y >= h) {
+    } else if (x < f->mx || y < f->my || x >= (int)w - f->mx
+               || y >= (int)h - f->my) {
         return -1;
     }
     return hitmap[w * y + x];
@@ -84,7 +85,7 @@ static int peek(const unsigned char *hitmap, unsigned int w, unsigned int h,
 
 static char look(double posx, double posy, double dir, unsigned char id,
                  const unsigned char *hitmap, unsigned int w, unsigned int h,
-                 int level, bool wrap)
+                 int level, const struct aiField *field)
 {
     const int COWARDNESS_FRONT = levels[level].front;
     const int COWARDNESS_SIDES = levels[level].sides;
@@ -96,7 +97,7 @@ static char look(double posx, double posy, double dir, unsigned char id,
             /* left diagonal */
             checkx = posx + i*cos(dir - M_PI_4);
             checky = posy + i*sin(dir - M_PI_4);
-            result = peek(hitmap, w, h, checkx, checky, wrap);
+            result = peek(hitmap, w, h, checkx, checky, field);
             if (result < 0)
                 return 'r';
             if (result != id + 8 && result != id + 16 && result != 0)
@@ -104,7 +105,7 @@ static char look(double posx, double posy, double dir, unsigned char id,
             /* right diagonal */
             checkx = posx + i*cos(dir + M_PI_4);
             checky = posy + i*sin(dir + M_PI_4);
-            result = peek(hitmap, w, h, checkx, checky, wrap);
+            result = peek(hitmap, w, h, checkx, checky, field);
             if (result < 0)
                 return 'r';
             if (result != id + 8 && result != id + 16 && result != 0)
@@ -114,7 +115,7 @@ static char look(double posx, double posy, double dir, unsigned char id,
             /* right side */
             checkx = posx + i*cos(dir + M_PI_2);
             checky = posy + i*sin(dir + M_PI_2);
-            result = peek(hitmap, w, h, checkx, checky, wrap);
+            result = peek(hitmap, w, h, checkx, checky, field);
             if (result < 0)
                 return 'r';
             if (result != id + 8 && result != id + 16 && result != 0)
@@ -122,7 +123,7 @@ static char look(double posx, double posy, double dir, unsigned char id,
             /* left side */
             checkx = posx + i*cos(dir - M_PI_2);
             checky = posy + i*sin(dir - M_PI_2);
-            result = peek(hitmap, w, h, checkx, checky, wrap);
+            result = peek(hitmap, w, h, checkx, checky, field);
             if (result < 0)
                 return 'r';
             if (result != id + 8 && result != id + 16 && result != 0)
@@ -131,7 +132,7 @@ static char look(double posx, double posy, double dir, unsigned char id,
         /* front */
         checkx = posx + i * cos(dir);
         checky = posy + i * sin(dir);
-        result = peek(hitmap, w, h, checkx, checky, wrap);
+        result = peek(hitmap, w, h, checkx, checky, field);
         if (result < 0)
             return 'r';
         if (result != id + 8 && result != id + 16 && result != 0) {
@@ -147,10 +148,10 @@ static char look(double posx, double posy, double dir, unsigned char id,
 
 char pollAi(double posx, double posy, double dir, unsigned char id,
             const unsigned char *hitmap, unsigned int w, unsigned int h,
-            int level, bool wrap)
+            int level, const struct aiField *field)
 {
     level %= N_AI_LEVELS;
-    char turn = look(posx, posy, dir, id, hitmap, w, h, level, wrap);
+    char turn = look(posx, posy, dir, id, hitmap, w, h, level, field);
 
     /* A weak player now and then does not see it coming. */
     if (turn != '0' && levels[level].lapse && rand() % levels[level].lapse == 0)

@@ -9,6 +9,8 @@
 #define H 240
 
 static unsigned char hitmap[W * H];
+static const struct aiField solid = {false, 0, 0};
+static const struct aiField wrap = {true, 0, 0};
 
 /* A computer player in the middle heading right; a vertical wall of player 2
  * stands `gap` pixels in front of it. */
@@ -17,7 +19,7 @@ static char poll(int gap, int level)
     memset(hitmap, 0, sizeof(hitmap));
     for (int y = 0; y < H; ++y)
         hitmap[W * y + 100 + gap] = 2;
-    return pollAi(100, 120, 0, 1, hitmap, W, H, level, false);
+    return pollAi(100, 120, 0, 1, hitmap, W, H, level, &solid);
 }
 
 int main(void)
@@ -36,17 +38,23 @@ int main(void)
     assert(turned > 800 && turned < 1000);
     /* An empty field: nothing to do. */
     memset(hitmap, 0, sizeof(hitmap));
-    assert(pollAi(100, 120, 0, 1, hitmap, W, H, AI_HARD, false) == '0');
+    assert(pollAi(100, 120, 0, 1, hitmap, W, H, AI_HARD, &solid) == '0');
     /* A weaker player uses weapons less. */
     assert(aiWeaponProb(AI_EASY) < aiWeaponProb(AI_NORMAL));
     assert(aiWeaponProb(AI_NORMAL) < aiWeaponProb(AI_HARD));
     /* A wall of the field is seen as a wall, unless the field wraps around. */
     memset(hitmap, 0, sizeof(hitmap));
-    assert(pollAi(W - 10, 120, 0, 1, hitmap, W, H, AI_NORMAL, false) == 'r');
-    assert(pollAi(W - 10, 120, 0, 1, hitmap, W, H, AI_NORMAL, true) == '0');
+    assert(pollAi(W - 10, 120, 0, 1, hitmap, W, H, AI_NORMAL, &solid) == 'r');
+    assert(pollAi(W - 10, 120, 0, 1, hitmap, W, H, AI_NORMAL, &wrap) == '0');
     /* ... and what lies on the far side counts then. */
     hitmap[W * 120 + 5] = 2;
-    assert(pollAi(W - 10, 120, 0, 1, hitmap, W, H, AI_NORMAL, true) != '0');
+    assert(pollAi(W - 10, 120, 0, 1, hitmap, W, H, AI_NORMAL, &wrap) != '0');
+
+    /* Walls that have closed in 100 pixels are walls: 50 ahead of a player. */
+    memset(hitmap, 0, sizeof(hitmap));
+    const struct aiField closed = {false, 100, 60};
+    assert(pollAi(W - 130, 120, 0, 1, hitmap, W, H, AI_NORMAL, &closed) == 'r');
+    assert(pollAi(W - 130, 120, 0, 1, hitmap, W, H, AI_NORMAL, &solid) == '0');
 
     /* Steering towards something: right is a larger direction. */
     assert(aiSteerTo(0, 0, 0, 50, 0) == '0');       /* Dead ahead */

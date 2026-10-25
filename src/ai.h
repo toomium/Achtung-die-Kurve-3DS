@@ -17,9 +17,16 @@ double aiSeekRange(int level);
 /* The turn that leads towards (tx, ty): 'l', 'r', or '0' if it is ahead. */
 char aiSteerTo(double posx, double posy, double dir, double tx, double ty);
 
-/* With `wrap` the field has no walls: what lies beyond one edge is the far one. */
+/* What a computer player has to know of the walls. With `wrap` there are none:
+ * what lies beyond one edge is the far one. Otherwise (mx, my) is how far the
+ * walls have closed in from the sides and from the top and bottom. */
+struct aiField {
+    bool wrap;
+    int mx, my;
+};
+
 char pollAi(double posx, double posy, double dir, unsigned char id,
             const unsigned char *hitmap, unsigned int w, unsigned int h,
-            int level, bool wrap);
+            int level, const struct aiField *field);
 
 #endif

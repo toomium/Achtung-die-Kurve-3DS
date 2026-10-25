@@ -40,6 +40,10 @@ static const unsigned int FPS_CAP = 100;
 /* In the bounce mode a head turns back this far from the edge. */
 #define BOUNCE_EDGE 2
 
+/* With closing walls: after this long they start to come in, this fast. */
+#define CLOSE_AFTER_MS  10000
+#define CLOSE_SPEED     4.0     /* Pixels per second at the sides */
+
 /* A computer player uses a weapon that it found much sooner than one it was
  * given at the start. */
 #ifdef __3DS__
@@ -935,6 +939,44 @@ void clearRecents(int fromX, int toX, int fromY, int toY)
     }
 }
 
+/* How long the round has gone on, for the walls that close in. */
+static int closeTime = 0;
+
+/* How far the walls have closed in: at the sides, and at top and bottom. */
+static void closedIn(int *mx, int *my)
+{
+    *mx = *my = 0;
+    if (wallMode != WALLS_CLOSE || closeTime < CLOSE_AFTER_MS)
+        return;
+    int m = (int)((closeTime - CLOSE_AFTER_MS) / 1000.0 * CLOSE_SPEED);
+    if (m > (int)WINDOW_W / 2 - 24)
+        m = (int)WINDOW_W / 2 - 24;
+    *mx = m;
+    *my = m * WINDOW_H / WINDOW_W;
+}
+
+#ifdef __3DS__
+/* Paints what is out of bounds, under the trails. */
+static void drawClosedIn(SDL_Surface *s)
+{
+    int mx, my;
+    closedIn(&mx, &my);
+    if (mx == 0)
+        return;
+    Uint32 dark = SDL_MapRGB(s->format, 0x4A, 0x0E, 0x1C);
+    Uint32 edge = SDL_MapRGB(s->format, 0xFF, 0x4A, 0x5A);
+    int w = s->w, h = s->h;
+    SDL_Rect zone[4] = {{0, 0, w, my}, {0, h - my, w, my},
+                        {0, my, mx, h - 2 * my}, {w - mx, my, mx, h - 2 * my}};
+    SDL_Rect line[4] = {{mx, my, w - 2 * mx, 1}, {mx, h - my - 1, w - 2 * mx, 1},
+                        {mx, my, 1, h - 2 * my}, {w - mx - 1, my, 1, h - 2 * my}};
+    for (int k = 0; k < 4; ++k) {
+        SDL_FillRect(s, &zone[k], dark);
+        SDL_FillRect(s, &line[k], edge);
+    }
+}
+#endif
+
 /**
  * Logic of the main gameplay.
  *
@@ -969,6 +1011,7 @@ int logicGame(void)
         beginMatchEnd();
         return 1;
     }
+    closeTime += delta;
 
     /* The shake dies down: the offset gets smaller as the time runs out. */
     if (shakeLeft > 0) {
@@ -988,6 +1031,10 @@ int logicGame(void)
 
     /* Movement and turning follow the game speed rule, timers don't. */
     double mdelta = delta * gameSpeed / 100.0;
+
+    int closeX, closeY;
+    closedIn(&closeX, &closeY);
+    const struct aiField field = {wallMode == WALLS_WRAP, closeX, closeY};
 
     for (int i = 0; i < MAX_PLAYERS; ++i) {
         if (winnerDeclared)
@@ -1094,8 +1141,7 @@ int logicGame(void)
                     */
 
                     char c = pollAi(p->posx, p->posy, p->dir, p->active,
-                                    hitmap, WINDOW_W, WINDOW_H, p->aiLevel,
-                                    wallMode == WALLS_WRAP);
+                                    hitmap, WINDOW_W, WINDOW_H, p->aiLevel, &field);
 #ifdef __3DS__
                     /* With nothing in the way, an empty hand goes for an item. */
                     int tx, ty;
@@ -1171,6 +1217,15 @@ int logicGame(void)
                 curx = (unsigned int)p->posx;
                 cury = (unsigned int)p->posy;
 
+                /* Out of the part of the field that is left: dead. */
+                if (closeX > 0 && ((int)curx < closeX
+                                   || (int)curx >= (int)WINDOW_W - closeX
+                                   || (int)cury < closeY
+                                   || (int)cury >= (int)WINDOW_H - closeY)) {
+                    killPlayer(p->active, 0);
+                    continue;
+                }
+
                 if (holes) {
                     p->holecount += delta;
                     if (p->holecount > HOLE_FREQ)
@@ -1216,6 +1271,9 @@ void displayGame(void)
 {
     useTopView();
     clearPlayfield(screen);
+#ifdef __3DS__
+    drawClosedIn(screen);
+#endif
 
 #ifdef __3DS__
     SDL_Rect shaken = {shakeX, shakeY, 0, 0};
@@ -1484,6 +1542,7 @@ void displayResume(void)
     /* The field as it was, with the number over it. */
     useTopView();
     clearPlayfield(screen);
+    drawClosedIn(screen);
     if (particleEffects && hasParticles())
         SDL_BlitSurface(particleScreen, NULL, screen, NULL);
     SDL_BlitSurface(gameScreen, NULL, screen, NULL);
@@ -1717,6 +1776,7 @@ void newRound(void)
 
 #ifdef __3DS__
     matchWinner = -1;
+    closeTime = 0;
     startPageStale = true;
     shakeLeft = shakeX = shakeY = 0;
 #endif
@@ -2965,8 +3025,8 @@ static const char *const ruleHelp[N_RULE_ROWS][4] = {
     {"OFF: PLAY WITHOUT WEAPONS.", "FIXED: EVERYONE PICKS ONE BEFORE THE GAME.",
      "ITEMS: COLLECT THEM ON THE FIELD.", NULL},
     {"GAPS IN THE TRAILS THAT YOU CAN DRIVE", "THROUGH.", NULL, NULL},
-    {"SOLID: THE WALL STOPS YOU.", "WRAP: THERE IS NO WALL, YOU COME OUT ON",
-     "THE OTHER SIDE OF THE FIELD.", "BOUNCE: THE WALL THROWS YOU BACK."},
+    {"SOLID: THE WALL STOPS YOU. WRAP: YOU COME", "OUT ON THE OTHER SIDE. BOUNCE: THE WALL",
+     "THROWS YOU BACK. CLOSE: AFTER 10 SECONDS", "THE WALLS COME IN."},
     {"EXACTLY TWO PLAYERS START FACE TO FACE", "IN THE MIDDLE OF THE FIELD. WITH MORE",
      "PLAYERS, ONLY THE FIRST TWO PLAY.", NULL},
     {"HOW FAST EVERYONE MOVES AND TURNS.", NULL, NULL, NULL},
@@ -3185,8 +3245,8 @@ static void drawRulesBottom(void)
             drawSwitch(r, RULE_HOLES, holes);
             break;
         case RULE_WALLS: {
-            const char *labels[N_WALL_MODES] = {"SOLID", "WRAP", "BOUNCE"};
-            drawChoice(r, RULE_WALLS, 56, N_WALL_MODES, labels, wallMode, 0x7);
+            const char *labels[N_WALL_MODES] = {"SOLID", "WRAP", "BOUNCE", "CLOSE"};
+            drawChoice(r, RULE_WALLS, 52, N_WALL_MODES, labels, wallMode, 0xF);
             break;
         }
         case RULE_DUEL:
