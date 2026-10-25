@@ -16,7 +16,9 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    container: devkitpro/devkitarm:latest
+    # Pinned, not :latest: the image brings the package databases, so no
+    # `dkp-pacman -Sy` is needed (the package server answers CI with 403).
+    container: devkitpro/devkitarm:20260610
     steps:
       - uses: actions/checkout@v4
 
@@ -31,7 +33,6 @@ jobs:
 
       - name: Libraries
         run: |
-          dkp-pacman -Sy --noconfirm
           dkp-pacman -S --noconfirm 3ds-sdl 3ds-sdl_image 3ds-sdl_mixer \
             3ds-sdl_ttf 3ds-libpng 3ds-libjpeg-turbo 3ds-zlib 3ds-bzip2 \
             3ds-freetype 3ds-libogg 3ds-libvorbisidec 3ds-libmad 3ds-mikmod
@@ -62,6 +63,8 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/download-artifact@v4
         with:
@@ -116,7 +119,12 @@ jobs:
           **Without installing:** copy \`achtung-die-kurve.3dsx\` to \`sd:/3ds/\` and start it from the Homebrew Launcher.
 
           Sound needs the DSP firmware dumped from your own console (\`sd:/3ds/dspfirm.cdc\`).
+
+          ## Changes
+
           NOTES
+          prev=$(git describe --tags --abbrev=0 "${GITHUB_REF_NAME}^" 2>/dev/null || true)
+          git log ${prev:+$prev..}HEAD --no-merges --pretty='- %s' >> notes.md
 
       - uses: softprops/action-gh-release@v2
         if: github.ref_type == 'tag'
