@@ -36,6 +36,14 @@
 
 static const unsigned int FPS_CAP = 100;
 
+/* A computer player uses a weapon that it found much sooner than one it was
+ * given at the start. */
+#ifdef __3DS__
+#define aiWeaponRate() (itemMode ? 40.0 : 1.0)
+#else
+#define aiWeaponRate() 1.0
+#endif
+
 /* The background of the playfield: a theme from the shop on the 3DS. */
 #ifdef __3DS__
 #define clearPlayfield(s) shopClearPlayfield(s)
@@ -1028,7 +1036,7 @@ int logicGame(void)
                 if (weapons && p->wep_time == WEP_NONACTIVE
                         && p->wep_count > 0) {
                     if (p->ai) {
-                        if (rand() / (double)RAND_MAX < aiWeaponProb(p->aiLevel)) {
+                        if (rand() / (double)RAND_MAX < aiWeaponProb(p->aiLevel) * aiWeaponRate()) {
                             p->wep_time = wep_list[p->weapon].func(p, 1);
                             p->wep_count -= 1;
                             refreshGameScreen();
