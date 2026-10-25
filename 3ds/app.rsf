@@ -26,11 +26,13 @@ AccessControlInfo:
   ReleaseKernelMajor      : "02"
   ReleaseKernelMinor      : "33"
   UseExtSaveData          : false
-  # The settings and the log live on the SD card. The Play Coins are in a system
-  # file; whether an installed title may open it is not known yet.
+  # The settings and the log live on the SD card and are written there (Direct
+  # Sdmc alone only reads). The Play Coins are in a system file; whether an
+  # installed title may open it is not known yet.
   FileSystemAccess:
     - CategorySystemApplication
     - DirectSdmc
+    - DirectSdmcWrite
   IdealProcessor          : 0
   AffinityMask            : 1
   Priority                : 16
