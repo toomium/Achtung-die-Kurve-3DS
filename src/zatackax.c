@@ -3335,105 +3335,96 @@ int logicWepMenu(void)
     return 1;
 }
 
-/* A small arrow pointing down, 7 pixels wide, with its tip at (cx, y + 3). */
-static void drawArrowDown(SDL_Surface *s, int cx, int y, SDL_Color color)
+/* The weapons are a grid on the bottom screen, where they can be touched. */
+#define WEP_COLS    4
+#define WEP_GAP     6
+
+static SDL_Rect wepCell(int i)
 {
-    Uint32 c = uiMap(s, color);
-    for (int row = 0; row < 4; ++row) {
-        SDL_Rect r = {cx - (3 - row), y + row, 7 - 2 * row, 1};
-        SDL_FillRect(s, &r, c);
-    }
+    int w = wepIcons[0]->w, h = wepIcons[0]->h;
+    int x0 = (320 - (WEP_COLS * w + (WEP_COLS - 1) * WEP_GAP)) / 2;
+    return (SDL_Rect){x0 + (i % WEP_COLS) * (w + WEP_GAP),
+                      4 + (i / WEP_COLS) * (h + WEP_GAP), w, h};
 }
 
-/* The weapons as a grid on the top screen. */
+/* Who has chosen what, and the weapon of the player in turn, described. */
 static void drawWepTop(void)
 {
-    const int cols = 4, gap = 10;
-    int iconW = wepIcons[0]->w;
-    int iconH = wepIcons[0]->h;
-    int rows = (N_WEAPONS + cols - 1) / cols;
-
     useTopView();
     clearBackground(screen);
 
-    int x0 = (screen->w - (cols * iconW + (cols - 1) * gap)) / 2;
-    int y0 = (screen->h - (rows * iconH + (rows - 1) * gap)) / 2;
+    for (int k = 0; k < nPlayers; ++k) {
+        struct player *p = &players[k];
+        SDL_Rect cell = {8 + (k % 2) * 194, 8 + (k / 2) * 34, 190, 30};
+        bool turn = k == wepCursor;
+        SDL_Color c = p->ai ? uiMix(uiColPanel, colors[p->color], 55)
+                            : colors[p->color];
 
-    for (int i = 0; i < N_WEAPONS; ++i) {
-        SDL_Rect offset = {x0 + (i % cols) * (iconW + gap),
-                           y0 + (i / cols) * (iconH + gap), 0, 0};
-
-        /* A yellow frame around the weapon of the player that is choosing */
-        if (players[wepCursor].weapon == i) {
-            SDL_Rect frame = {offset.x - 3, offset.y - 3, iconW + 6, iconH + 6};
-            uiPanel(screen, frame, uiColAccent, uiColAccent);
-            SDL_Rect inner = {offset.x - 1, offset.y - 1, iconW + 2, iconH + 2};
-            SDL_FillRect(screen, &inner, uiMap(screen, uiColPanel));
-        }
-
-        SDL_BlitSurface(wepIcons[0], NULL, screen, &offset);
-        SDL_BlitSurface(wepIcons[i + 1], NULL, screen, &offset);
-
-        /* One arrow per player above the weapon he has chosen */
-        for (int j = 0; j < nPlayers; ++j) {
-            if (players[j].weapon == i)
-                drawArrowDown(screen, offset.x + 4 + j * 7, offset.y - 9,
-                              colors[players[j].color]);
-        }
+        uiPanel(screen, cell, uiColPanel,
+                turn ? uiColAccent : uiMix(uiColPanel, c, 40));
+        uiBall(screen, cell.x + 12, cell.y + 15, 4, 1, c);
+        char name[9];
+        snprintf(name, sizeof(name), "%s", p->name);
+        uiText(screen, FONT_BROADCAST, name, c, cell.x + 24, cell.y + 11,
+               UI_LEFT);
+        SDL_Rect icon = {cell.x + 98, cell.y + 7, 0, 0};
+        SDL_BlitSurface(smallWepIcons[p->weapon], NULL, screen, &icon);
+        uiText(screen, FONT_BROADCAST, wep_list[p->weapon].name,
+               turn ? uiColText : uiColDim, cell.x + 118, cell.y + 11, UI_LEFT);
     }
+
+    struct player *p = &players[wepCursor];
+    struct weapon w = wep_list[p->weapon];
+    SDL_Rect card = {8, 150, 384, 82};
+    card = uiCard(screen, card, uiColPanel, uiMix(uiColPanel, colors[p->color], 60),
+                  false);
+    uiText(screen, FONT_MENU, w.name, colors[p->color], card.x + 12, card.y + 10,
+           UI_LEFT);
+    uiText(screen, FONT_BROADCAST, w.desc1, uiColText, card.x + 12, card.y + 34,
+           UI_LEFT);
+    uiText(screen, FONT_BROADCAST, w.desc2, uiColText, card.x + 12, card.y + 48,
+           UI_LEFT);
+    char charges[20];
+    snprintf(charges, sizeof(charges), "CHARGES: %d", w.charges);
+    uiText(screen, FONT_BROADCAST, charges, uiColAccent, card.x + 12,
+           card.y + 62, UI_LEFT);
 }
 
-/* Who has chosen what, and the chosen weapon of the player in turn. */
+/* The grid of weapons: tap one for the player in turn. */
 static void drawWepBottom(void)
 {
     useBottomView();
     clearBackground(screen);
     touchReset();
 
-    uiText(screen, FONT_MENU, "WEAPONS", uiColBlue, 16, 8, UI_LEFT);
+    for (int i = 0; i < N_WEAPONS; ++i) {
+        SDL_Rect offset = wepCell(i);
+        touchAdd(offset, i, TOUCH_ROW);
 
-    for (int k = 0; k < nPlayers; ++k) {
-        struct player *p = &players[k];
-        SDL_Rect cell = {16 + (k % 2) * 148, 32 + (k / 2) * 16, 144, 14};
-        bool turn = k == wepCursor;
+        /* A yellow frame around the weapon of the player that is choosing */
+        if (players[wepCursor].weapon == i) {
+            SDL_Rect frame = {offset.x - 3, offset.y - 3, offset.w + 6,
+                              offset.h + 6};
+            uiPanel(screen, frame, uiColAccent, uiColAccent);
+            SDL_Rect inner = {offset.x - 1, offset.y - 1, offset.w + 2,
+                              offset.h + 2};
+            SDL_FillRect(screen, &inner, uiMap(screen, uiColPanel));
+        }
 
-        if (!p->ai)
-            touchAdd(cell, k, TOUCH_ROW);
+        SDL_BlitSurface(wepIcons[0], NULL, screen, &offset);
+        SDL_BlitSurface(wepIcons[i + 1], NULL, screen, &offset);
 
-        if (turn)
-            uiPanel(screen, cell, uiColPanel, uiColAccent);
-        uiBall(screen, cell.x + 8, cell.y + 7, 3, 1, colors[p->color]);
-        uiText(screen, FONT_BROADCAST, wep_list[p->weapon].name,
-               p->ai ? uiMix(uiColPanel, colors[p->color], 55) : colors[p->color],
-               cell.x + 18, cell.y + 3, UI_LEFT);
+        /* A dot in the color of every player who has chosen it */
+        for (int j = 0; j < nPlayers; ++j) {
+            if (players[j].weapon == i)
+                uiBall(screen, offset.x + 6 + j * 7, offset.y + 6, 2, 1,
+                       colors[players[j].color]);
+        }
     }
 
-    struct player *p = &players[wepCursor];
-    struct weapon w = wep_list[p->weapon];
-    SDL_Rect card = {12, 100, 296, 80};
-    card = uiCard(screen, card, uiColPanel, uiMix(uiColPanel, colors[p->color], 60),
-                  false);
-    uiText(screen, FONT_MENU, w.name, colors[p->color], card.x + 12, card.y + 12,
-           UI_LEFT);
-    uiText(screen, FONT_BROADCAST, w.desc1, uiColText, card.x + 12, card.y + 36,
-           UI_LEFT);
-    uiText(screen, FONT_BROADCAST, w.desc2, uiColText, card.x + 12, card.y + 50,
-           UI_LEFT);
-    char charges[20];
-    snprintf(charges, sizeof(charges), "CHARGES: %d", w.charges);
-    uiText(screen, FONT_BROADCAST, charges, uiColAccent, card.x + 12,
-           card.y + 64, UI_LEFT);
-
-    /* Previous and next weapon beside GO: the top screen can't be touched. */
-    SDL_Rect less = {16, 186, 56, 30};
-    SDL_Rect go = {80, 186, 160, 30};
-    SDL_Rect more = {248, 186, 56, 30};
-    touchAdd(less, TOUCH_PREV, 0);
-    touchAdd(more, TOUCH_NEXT, 0);
+    SDL_Rect go = {80, 192, 160, 24};
     touchAdd(go, TOUCH_GO, TOUCH_ROW);
-    uiTile(screen, less, "<", NULL, NULL, uiColBlue, false, true);
     uiTile(screen, go, "GO", NULL, NULL, uiColGreen, false, true);
-    uiTile(screen, more, ">", NULL, NULL, uiColBlue, false, true);
 
     struct uiHint hints[] = {{"A", "GO"}, {"<>", "PICK"}, {"^v", "PLAYER"},
                              {"START", "GO"}};
@@ -3904,22 +3895,19 @@ static void touchWep(int id, int value, bool released)
 {
     (void)value;
 
-    if (id == TOUCH_PREV || id == TOUCH_NEXT) {
-        if (released) {
-            struct player *p = &players[wepCursor];
-            p->weapon = (p->weapon + (id == TOUCH_NEXT ? 1 : N_WEAPONS - 1))
-                % N_WEAPONS;
-            playSound(SOUND_BEEP, sound);
-        }
-        return;
-    }
     if (id == TOUCH_GO) {
         if (released)
             touchPressA();
         return;
     }
-    if (!released && id >= 0 && id < nPlayers && !players[id].ai)
-        wepCursor = id;
+    /* A weapon: it goes to the player in turn, and the next human follows. */
+    if (released && id >= 0 && id < N_WEAPONS) {
+        players[wepCursor].weapon = id;
+        int next = nextHuman(wepCursor, 1);
+        if (next >= 0)
+            wepCursor = next;
+        playSound(SOUND_BEEP, sound);
+    }
 }
 
 /* Going back from the lineup keeps what was chosen there; overwriting the file
