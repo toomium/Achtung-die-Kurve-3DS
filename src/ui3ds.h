@@ -41,6 +41,7 @@ extern const char *const uiIconSound[8];
 extern const char *const uiIconHome[8];
 extern const char *const uiIconShop[8];
 extern const char *const uiIconLock[8];
+extern const char *const uiIconTrophy[8];
 
 /* The palette. */
 /* Meaning of the colors: green go/confirm, blue settings,

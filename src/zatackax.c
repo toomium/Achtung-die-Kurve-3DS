@@ -31,6 +31,7 @@
 #include "slotmenu3ds.h"
 #include "stats3ds.h"
 #include "items3ds.h"
+#include "tournament3ds.h"
 #endif
 
 static const unsigned int FPS_CAP = 100;
@@ -1866,9 +1867,12 @@ void animTitle(void)
 }
 
 struct menu menuMode = {
-    2,
+    3,
     0,
 };
+
+/* The lineup leads to a tournament instead of a game (the third tile). */
+static bool tournamentSelected = false;
 
 /* ---- The lineup: eight slots, each OFF, AI or P1 ---- */
 
@@ -1885,6 +1889,36 @@ static struct {
 } savedRules;
 static bool netRulesSaved = false;
 
+/*
+ * Saves the settings with the rules of the lineup, not those that a match with
+ * several consoles or a tournament has put in their place.
+ */
+static void saveLineupSettings(void)
+{
+    if (tournamentActive())
+        tournamentSwapRules();
+    unsigned cap = scorecap;
+    bool h = holes, d = duelmode, w = weapons;
+    int speed = gameSpeed;
+    if (netRulesSaved) {
+        scorecap = savedRules.scorecap;
+        holes = savedRules.holes;
+        duelmode = savedRules.duelmode;
+        weapons = savedRules.weapons;
+        gameSpeed = savedRules.gameSpeed;
+    }
+    saveSettings();
+    if (netRulesSaved) {
+        scorecap = cap;
+        holes = h;
+        duelmode = d;
+        weapons = w;
+        gameSpeed = speed;
+    }
+    if (tournamentActive())
+        tournamentSwapRules();
+}
+
 /* The slot and the row that the cursor is on, on the lineup page, and the row on
  * the rules and options pages. */
 int lobbySlot = 0;
@@ -1900,7 +1934,7 @@ struct player *slotConfig(int i)
 /**
  * Puts the indices of the active slots into `idx` and returns how many there are.
  */
-static int activeSlots(int idx[MAX_PLAYERS])
+int activeSlots(int idx[MAX_PLAYERS])
 {
     int n = 0;
     for (int i = 0; i < MAX_PLAYERS; ++i) {
@@ -1915,9 +1949,12 @@ static int activeSlots(int idx[MAX_PLAYERS])
  * active slots there. A slot keeps its color. The setup is kept in slotBackup
  * and comes back with restoreSlots().
  */
+static int packedSlot[MAX_PLAYERS];     /* Which slot a packed player was */
+
 static void packSlots(int n, const int idx[MAX_PLAYERS])
 {
     memcpy(slotBackup, players, sizeof(players));
+    memcpy(packedSlot, idx, sizeof(packedSlot));
     for (int k = 0; k < MAX_PLAYERS; ++k) {
         if (k < n) {
             players[k] = slotBackup[idx[k]];
@@ -1937,8 +1974,11 @@ static void packSlots(int n, const int idx[MAX_PLAYERS])
  * Brings the setup of the slots back after a game. Called whenever a menu is
  * shown, so every way out of a game is covered.
  */
-static void restoreSlots(void)
+void restoreSlots(void)
 {
+    /* Any menu but the bracket means the tournament is over. */
+    if (tournamentActive() && curScene != &tourScene)
+        tournamentStop();
     if (slotsPacked) {
         memcpy(players, slotBackup, sizeof(players));
         slotsPacked = false;
@@ -1973,13 +2013,8 @@ static int nextHuman(int from, int dir)
 /**
  * Starts a game on this console with the current setup of players and rules.
  */
-static void startLocalGame(void)
+static void beginGame(int n, const int idx[MAX_PLAYERS])
 {
-    int idx[MAX_PLAYERS];
-    int n = activeSlots(idx);
-
-    if (duelmode && n > 2)
-        n = 2;
     packSlots(n, idx);
     nPlayers = n;
 
@@ -1998,6 +2033,25 @@ static void startLocalGame(void)
     } else {
         curScene = &gameStart;
     }
+}
+
+static void startLocalGame(void)
+{
+    int idx[MAX_PLAYERS];
+    int n = activeSlots(idx);
+
+    if (duelmode && n > 2)
+        n = 2;
+    beginGame(n, idx);
+}
+
+/* A duel of the tournament between two slots of the lineup. */
+void startDuel(int a, int b)
+{
+    int idx[MAX_PLAYERS] = {a, b};
+
+    restoreSlots();
+    beginGame(2, idx);
 }
 
 /* ---- A match with several consoles ---- */
@@ -2326,8 +2380,9 @@ int logicModeMenu(void)
 {
     if (enterButtonDown()) {
         clearEnterButtons();
-        if (menuMode.choice == 0) {
+        if (menuMode.choice != 1) {
             playSound(SOUND_BEEP, sound);
+            tournamentSelected = menuMode.choice == 2;
             lobbySlot = 0;
             lobbyRow = 0;
             curScene = &lobbyMenu;
@@ -2346,17 +2401,21 @@ void displayModeMenu(void)
     useBottomView();
     clearBackground(screen);
 
-    SDL_Rect one = {16, 20, 288, 88};
-    SDL_Rect many = {16, 124, 288, 88};
+    SDL_Rect one = {16, 12, 288, 62};
+    SDL_Rect many = {16, 82, 288, 62};
+    SDL_Rect tour = {16, 152, 288, 62};
 
     touchReset();
     touchAdd(one, 0, TOUCH_ROW);
     touchAdd(many, 1, TOUCH_ROW);
+    touchAdd(tour, 2, TOUCH_ROW);
 
     uiTile(screen, one, "ONE CONSOLE", NULL, uiIconOneConsole, uiColGreen,
            menuMode.choice == 0, true);
     uiTile(screen, many, "MULTIPLAYER", NULL, uiIconManyConsoles,
            uiColBlue, menuMode.choice == 1, true);
+    uiTile(screen, tour, "TOURNAMENT", NULL, uiIconTrophy, uiColAccent,
+           menuMode.choice == 2, true);
 
     struct uiHint hints[] = {{"A", "OK"}, {"B", "BACK"}};
     uiHintBar(screen, hints, 2);
@@ -2524,7 +2583,7 @@ static void setSlotState(int slot, int mode)
 void lobbyStart(void)
 {
     int idx[MAX_PLAYERS];
-    if (activeSlots(idx) < MIN_PLAYERS) {
+    if (activeSlots(idx) < (tournamentSelected ? 3 : MIN_PLAYERS)) {
         playSound(SOUND_BEP, sound);
         return;
     }
@@ -2718,6 +2777,9 @@ static void drawLobbyBottom(void)
     char title[16];
     snprintf(title, sizeof(title), "SLOT %d", lobbySlot + 1);
     uiText(screen, FONT_MENU, title, colors[p->color], 16, 8, UI_LEFT);
+    if (tournamentSelected)
+        uiText(screen, FONT_BROADCAST, "TOURNAMENT (3+)", uiColAccent, 100, 14,
+               UI_LEFT);
 
     /* The top screen can't be touched: arrows choose the slot. */
     SDL_Rect prev = {212, 2, 48, 28};
@@ -2906,7 +2968,10 @@ void rulesStart(void)
 {
     playSound(SOUND_ROUND_BEGIN, sound);
     saveSettings();
-    startLocalGame();
+    if (tournamentSelected)
+        tournamentBegin();
+    else
+        startLocalGame();
 }
 
 int logicRules(void)
@@ -3474,7 +3539,7 @@ void beginRoundEnd(void)
     }
     curScene = &roundEndScene;
     statsRoundEnd(roundWinner);
-    saveSettings();
+    saveLineupSettings();
     if (netGameRole() == NET_ROLE_HOST)
         netGameRoundEndBegin();
     displayRoundEnd();
@@ -3570,7 +3635,15 @@ void beginMatchEnd(void)
     curScene = &matchEndScene;
     menuMatch.choice = 0;
     statsMatchEnd(matchWinner);
-    saveSettings();
+    saveLineupSettings();
+    if (tournamentActive() && netGameRole() == NET_ROLE_NONE
+        && matchWinner >= 0) {
+        /* A duel of the tournament: the bracket goes on instead. */
+        endRound();
+        tournamentDuelOver(packedSlot[matchWinner]);
+        curScene->displayFunc();
+        return;
+    }
     if (netGameRole() == NET_ROLE_HOST)
         netGameRoundEndBegin();
     displayMatchEnd();
@@ -3859,6 +3932,7 @@ static void initTouch(void)
     modeMenu.touchFunc = touchModeMenu;
     lobbyMenu.touchFunc = touchLobby;
     lobbyMenu.leaveFunc = saveLineup;
+    tournamentInit(&modeMenu);
     slotMenusInit(&lobbyMenu);
     rulesMenu.touchFunc = touchRules;
     wepMenu.touchFunc = touchWep;

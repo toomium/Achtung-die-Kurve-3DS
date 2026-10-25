@@ -136,6 +136,17 @@ const char *const uiIconShop[8] = {
     "..####.."
 };
 
+const char *const uiIconTrophy[8] = {
+    ".######.",
+    "########",
+    "#.####.#",
+    "#.####.#",
+    ".######.",
+    "..####..",
+    "...##...",
+    ".######."
+};
+
 const char *const uiIconLock[8] = {
     "..####..",
     ".#....#.",
