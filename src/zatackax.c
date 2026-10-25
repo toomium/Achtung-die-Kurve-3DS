@@ -2318,12 +2318,18 @@ void netApplyFrame(int gstate, int cd, int winner,
 {
     if (n > nPlayers)
         n = nPlayers;
-    /* The host is another console: take nothing outside the field. */
+    /*
+     * The host is another console: keep what it sends inside the field. Its
+     * players may be a little outside, a head that has hit the wall is, and
+     * that is no reason to drop the whole picture. (A NaN gives 0.)
+     */
+    struct netPlayerFrame sane[MAX_PLAYERS];
     for (int i = 0; i < n; ++i) {
-        if (!(f[i].x >= 0 && f[i].x < WINDOW_W && f[i].y >= 0
-              && f[i].y < WINDOW_H))
-            return;
+        sane[i] = f[i];
+        sane[i].x = f[i].x >= 0 ? (f[i].x < WINDOW_W ? f[i].x : WINDOW_W - 1) : 0;
+        sane[i].y = f[i].y >= 0 ? (f[i].y < WINDOW_H ? f[i].y : WINDOW_H - 1) : 0;
     }
+    f = sane;
     if (winner < -1 || winner >= nPlayers)
         winner = -1;
 
