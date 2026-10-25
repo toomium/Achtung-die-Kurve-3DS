@@ -249,6 +249,10 @@ static void drawPattern(SDL_Surface *s, SDL_Rect area, int pattern,
     SDL_Color dark = uiMix(base, (SDL_Color){0, 0, 0, 0}, 30);
     int x1 = area.x + area.w, y1 = area.y + area.h;
 
+    /* The last squares and stripes would stick out over the edge. */
+    SDL_Rect oldClip = s->clip_rect;
+    SDL_SetClipRect(s, &area);
+
     switch (pattern) {
     case ITEM_PATTERN_GRID:
         for (int x = area.x; x < x1; x += 20)
@@ -306,6 +310,8 @@ static void drawPattern(SDL_Surface *s, SDL_Rect area, int pattern,
     default:
         break;
     }
+
+    SDL_SetClipRect(s, &oldClip);
 }
 
 static bool patternInUse(void)
