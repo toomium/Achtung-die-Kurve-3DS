@@ -3486,6 +3486,8 @@ void displayWepMenu(void)
 /* ---- After a round and after a match ---- */
 
 static int roundWinner = -1;    /* The last player alive, or -1 for a draw */
+static Uint32 roundEndAt = 0;   /* When the round ended */
+#define AUTO_NEXT_MS 2500       /* A game of computer players goes on after this */
 
 /**
  * The score page on the bottom screen, in the game and after a round: one row
@@ -3580,6 +3582,7 @@ void beginRoundEnd(void)
             roundWinner = i;
     }
     curScene = &roundEndScene;
+    roundEndAt = SDL_GetTicks();
     statsRoundEnd(roundWinner);
     saveLineupSettings();
     if (netGameRole() == NET_ROLE_HOST)
@@ -3609,8 +3612,12 @@ int logicRoundEnd(void)
         return netGameStatusChanged() || changed;
     }
 
-    /* Only A goes on: the score is looked at as long as one likes. */
-    if (enterButtonDown()) {
+    /* Only A goes on: the score is looked at as long as one likes. Computer
+     * players alone have nobody to press it, so the next round starts by itself. */
+    bool alone = true;
+    for (int i = 0; i < nPlayers; ++i)
+        alone = alone && players[i].ai;
+    if (enterButtonDown() || (alone && SDL_GetTicks() - roundEndAt > AUTO_NEXT_MS)) {
         clearEnterButtons();
         clearSurface(gameScreen);
         newRound();

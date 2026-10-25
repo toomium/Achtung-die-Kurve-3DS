@@ -31,6 +31,8 @@ static struct {
     bool duelmode;
 } saved;                        /* The rules of the lineup */
 static int fight[2];            /* The slots of the next duel */
+static Uint32 shownAt = 0;      /* When the bracket was shown */
+#define AUTO_FIGHT_MS 3000      /* A duel of two computer players starts by itself */
 
 bool tournamentActive(void)
 {
@@ -84,6 +86,7 @@ bool tournamentBegin(void)
 
     tourStart(slots, n);
     nextFight();
+    shownAt = SDL_GetTicks();
     playSound(SOUND_BEEP, sound);
     curScene = &tourScene;
     return true;
@@ -93,12 +96,17 @@ void tournamentDuelOver(int winner)
 {
     tourDuelDone(winner);
     nextFight();
+    shownAt = SDL_GetTicks();
     curScene = &tourScene;
 }
 
 static int logicTour(void)
 {
-    if (enterButtonDown()) {
+    /* Nobody to press A for two computer players. */
+    bool alone = tourChampion() < 0 && slotMode[fight[0]] == SLOT_AI
+        && slotMode[fight[1]] == SLOT_AI;
+
+    if (enterButtonDown() || (alone && SDL_GetTicks() - shownAt > AUTO_FIGHT_MS)) {
         clearEnterButtons();
         if (tourChampion() >= 0) {
             playSound(SOUND_BEEP, sound);
