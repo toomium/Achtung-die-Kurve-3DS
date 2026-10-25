@@ -113,4 +113,26 @@ bool statsParse(const char *text)
     return true;
 }
 
+/* ---- The titles ---- */
+
+int statsTitleCount(void)
+{
+    return N_TITLES;
+}
+
+const char *statsTitleName(int i)
+{
+    return titles[i].name;
+}
+
+unsigned statsTitleWins(int i)
+{
+    return titles[i].wins;
+}
+
+int statsTitleNow(void)
+{
+    return titleOf(stats.roundWins);
+}
+
 #endif /* __3DS__ */

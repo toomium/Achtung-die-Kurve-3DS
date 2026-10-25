@@ -30,6 +30,7 @@
 #include "shop3ds.h"
 #include "slotmenu3ds.h"
 #include "stats3ds.h"
+#include "profile3ds.h"
 #include "items3ds.h"
 #include "tournament3ds.h"
 #endif
@@ -51,10 +52,10 @@ static const unsigned int FPS_CAP = 100;
 #define clearPlayfield(s) clearBackground(s)
 #endif
 
-/* On the 3DS: 0 PLAY, 1 OPTIONS, 2 EXIT, 3 SHOP. */
+/* On the 3DS: 0 PLAY, 1 OPTIONS, 2 EXIT, 3 SHOP, 4 PROFILE. */
 struct menu menuMain = {
 #ifdef __3DS__
-    4,
+    5,
 #else
     3,
 #endif
@@ -2324,29 +2325,28 @@ int logicMainMenu(void)
             playSound(SOUND_BEEP, sound);
             shopEnter(&mainMenu);
             break;
+        case 4:
+            playSound(SOUND_BEEP, sound);
+            profileEnter(&mainMenu);
+            break;
         }
         return 1;
     }
 
-    /* PLAY above SHOP and OPTIONS, EXIT at the bottom. */
+    /* PLAY on top; then SHOP and PROFILE; then OPTIONS and EXIT. */
+    static const signed char up[5] = {0, 3, 4, 0, 0};
+    static const signed char down[5] = {3, 1, 2, 1, 2};
+    static const signed char left[5] = {0, 1, 1, 3, 3};
+    static const signed char right[5] = {0, 2, 2, 4, 4};
     int old = menuMain.choice;
-    if (menuButtonQuery(KEY_DOWN)) {
-        if (menuMain.choice == 0)
-            menuMain.choice = 3;
-        else if (menuMain.choice == 3 || menuMain.choice == 1)
-            menuMain.choice = 2;
-    } else if (menuButtonQuery(KEY_UP)) {
-        if (menuMain.choice == 2)
-            menuMain.choice = 3;
-        else
-            menuMain.choice = 0;
-    } else if (menuButtonQuery(KEY_RIGHT)) {
-        if (menuMain.choice == 3)
-            menuMain.choice = 1;
-    } else if (menuButtonQuery(KEY_LEFT)) {
-        if (menuMain.choice == 1)
-            menuMain.choice = 3;
-    }
+    if (menuButtonQuery(KEY_DOWN))
+        menuMain.choice = down[old];
+    else if (menuButtonQuery(KEY_UP))
+        menuMain.choice = up[old];
+    else if (menuButtonQuery(KEY_RIGHT))
+        menuMain.choice = right[old];
+    else if (menuButtonQuery(KEY_LEFT))
+        menuMain.choice = left[old];
 
     if (menuMain.choice != old) {
         playSound(SOUND_BEEP, sound);
@@ -2361,14 +2361,16 @@ void displayMainMenu(void)
     useBottomView();
     clearBackground(screen);
 
-    SDL_Rect play = {16, 12, 288, 76};
-    SDL_Rect shop = {16, 96, 140, 64};
-    SDL_Rect options = {164, 96, 140, 64};
-    SDL_Rect quit = {16, 168, 288, 44};
+    SDL_Rect play = {16, 10, 288, 68};
+    SDL_Rect shop = {16, 86, 140, 60};
+    SDL_Rect profile = {164, 86, 140, 60};
+    SDL_Rect options = {16, 154, 140, 60};
+    SDL_Rect quit = {164, 154, 140, 60};
 
     touchReset();
     touchAdd(play, 0, TOUCH_ROW);
     touchAdd(shop, 3, TOUCH_ROW);
+    touchAdd(profile, 4, TOUCH_ROW);
     touchAdd(options, 1, TOUCH_ROW);
     touchAdd(quit, 2, TOUCH_ROW);
 
@@ -2376,6 +2378,8 @@ void displayMainMenu(void)
            menuMain.choice == 0, true);
     uiTile(screen, shop, "SHOP", NULL, uiIconShop, uiColAccent,
            menuMain.choice == 3, true);
+    uiTile(screen, profile, "PROFILE", NULL, uiIconStar, uiColGreen,
+           menuMain.choice == 4, true);
     uiTile(screen, options, "OPTIONS", NULL, uiIconOptions, uiColBlue,
            menuMain.choice == 1, true);
     uiTile(screen, quit, "EXIT", NULL, uiIconExit, uiColRed,

@@ -28,6 +28,12 @@ const char *statsTitle(void);
 /* The title reached with the last round, or NULL if there was none. */
 const char *statsNewTitle(void);
 
+/* The titles, in the order of the rounds one has to win for them. */
+int statsTitleCount(void);
+const char *statsTitleName(int i);
+unsigned statsTitleWins(int i);
+int statsTitleNow(void);
+
 /* The numbers as one line of settings.cfg ("5,2,30,12,3"), and back. Parsing
  * keeps the old numbers and returns false if the line is wrong. */
 void statsFormat(char *buf, size_t size);
