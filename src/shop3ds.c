@@ -488,8 +488,9 @@ void shopDrawHeads(SDL_Surface *s, SDL_Rect at)
         const struct player *p = &players[k];
         if (p->headStyle == 0 || !p->alive)
             continue;
+        /* Twice the size of the trail, so that it can be seen from afar. */
         drawHead(s, p->headStyle - 1, (int)p->posx + at.x, (int)p->posy + at.y,
-                 1, uiMix(colors[p->color], (SDL_Color){255, 255, 255, 0}, 60));
+                 2, uiMix(colors[p->color], (SDL_Color){255, 255, 255, 0}, 60));
     }
 }
 
