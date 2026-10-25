@@ -19,6 +19,7 @@ struct member {
     unsigned char color;
     unsigned char ready;
     unsigned char head;         /* Shop head marker, see player.h */
+    unsigned char title;        /* The number of the title (stats3ds.h) */
     char name[PLAYER_NAME_LEN];
 };
 

@@ -15,6 +15,7 @@
 #include "player.h"
 #include "shop3ds.h"
 #include "slotmenu3ds.h"
+#include "stats3ds.h"
 #include "sound.h"
 #include "touch3ds.h"
 #include "ui3ds.h"
@@ -40,7 +41,7 @@ static const char *message = NULL;      /* Shown in red when something failed */
 
 /* What searchers can see of a group. The last number goes up whenever a message
  * changes, so that consoles with another version stay apart. */
-static const unsigned char groupInfo[] = {'Z', 'X', 2};
+static const unsigned char groupInfo[] = {'Z', 'X', 3};
 
 static bool sameVersion(const struct netGroup *g)
 {
@@ -288,6 +289,7 @@ struct msgProfile {
     unsigned char type;
     unsigned char color;
     unsigned char head;
+    unsigned char title;
     char name[PLAYER_NAME_LEN];
 };
 
@@ -373,11 +375,12 @@ static int freeColor(void)
 /* Host: takes over a node's profile. A color that someone else has is refused
  * (the node keeps its old one). */
 static void applyProfile(int node, int color, const char *name,
-                         unsigned char head)
+                         unsigned char head, unsigned char title)
 {
     struct member *m = &members[node - 1];
 
     m->head = head;
+    m->title = title;
     if (color >= 0 && color < N_COLORS && !colorTaken(color, node))
         m->color = color;
     if (name != NULL && strncmp(m->name, name, PLAYER_NAME_LEN - 1) != 0)
@@ -430,6 +433,7 @@ static void sendProfile(void)
     msg.type = MSG_PROFILE;
     msg.color = wantColor;
     msg.head = shopOwnedHead(me()->headStyle);
+    msg.title = statsTitleNow();
     snprintf(msg.name, sizeof(msg.name), "%s", me()->name);
     netSend(NET_HOST_NODE, &msg, sizeof(msg));
 }
@@ -445,7 +449,7 @@ static void profileChanged(void)
 {
     if (netIsHost()) {
         applyProfile(NET_HOST_NODE, wantColor, me()->name,
-                     shopOwnedHead(me()->headStyle));
+                     shopOwnedHead(me()->headStyle), statsTitleNow());
         wantColor = members[NET_HOST_NODE - 1].color;
     } else {
         sendProfile();
@@ -584,7 +588,7 @@ static bool receiveMessages(void)
                 memcpy(&msg, buf, sizeof(msg));
                 msg.name[PLAYER_NAME_LEN - 1] = '\0';
                 struct member before = members[from - 1];
-                applyProfile(from, msg.color, msg.name, msg.head);
+                applyProfile(from, msg.color, msg.name, msg.head, msg.title);
                 changed |= memcmp(&before, &members[from - 1],
                                   sizeof(before)) != 0;
             } else if (buf[0] == MSG_READY && phase == PH_READY
@@ -841,19 +845,23 @@ static void drawGroupTop(bool showReady)
                       : n == mine ? uiColAccent : uiMix(uiColPanel, c, 55),
                       n == mine);
         int cx = cell.x + w / 2;
-        uiBall(screen, cx, cell.y + 34, 8, 2, c);
+        uiBall(screen, cx, cell.y + 30, 8, 2, c);
 
         char name[11];
         snprintf(name, sizeof(name), "%s", m->name);
         uiText(screen, FONT_BROADCAST, name[0] != '\0' ? name : "...", c, cx,
-               cell.y + 60, UI_CENTER);
+               cell.y + 52, UI_CENTER);
+        /* The title of the player, as it came over the network. */
+        int title = m->title < statsTitleCount() ? m->title : 0;
+        uiText(screen, FONT_BROADCAST, statsTitleName(title), uiColDim, cx,
+               cell.y + 66, UI_CENTER);
         if (showReady)
             uiText(screen, FONT_MENU, m->ready ? "READY" : "...",
-                   m->ready ? uiColGreen : uiColOff, cx, cell.y + 76,
+                   m->ready ? uiColGreen : uiColOff, cx, cell.y + 78,
                    UI_CENTER);
         else
             uiText(screen, FONT_MENU, n == NET_HOST_NODE ? "HOST" : "",
-                   uiColGreen, cx, cell.y + 76, UI_CENTER);
+                   uiColGreen, cx, cell.y + 78, UI_CENTER);
         ++slot;
     }
 
