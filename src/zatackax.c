@@ -1955,10 +1955,8 @@ static void drawTitleBottom(bool blink)
     if (blink)
         uiText(screen, FONT_MENU, "PRESS A", uiColAccent, screen->w / 2, 92,
                UI_CENTER);
-    uiText(screen, FONT_BROADCAST, "ACHTUNG, DIE KURVE!", uiColGreen,
-           screen->w / 2, 150, UI_CENTER);
     uiText(screen, FONT_BROADCAST, "A 3DS PORT OF ZATACKA X", uiColDim,
-           screen->w / 2, 168, UI_CENTER);
+           screen->w / 2, 160, UI_CENTER);
     char profile[48];
     snprintf(profile, sizeof(profile), "%s  -  %u ROUNDS WON", statsTitle(),
              stats.roundWins);

@@ -1,4 +1,4 @@
-# Zatacka X for the Nintendo 3DS
+# Achtung, die Kurve! for the Nintendo 3DS (Zatacka X)
 
 A port of [Zatacka X](https://github.com/simenheg/zatackax) to the Nintendo 3DS. The game code in
 `../src` is shared with the desktop version; 3DS-specific code is guarded by `__3DS__` or lives in this
