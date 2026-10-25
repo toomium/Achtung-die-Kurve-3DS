@@ -42,7 +42,9 @@ extern bool particleEffects;
 extern bool border;
 extern bool duelmode;
 extern bool debugLog;      /* Write sdmc:/zatackax.log (3DS), set in settings.cfg only */
-extern bool wrapWalls;     /* No walls: one comes out on the other side (3DS rule) */
+/* What the walls of the field do (3DS rule). */
+enum { WALLS_SOLID = 0, WALLS_WRAP, WALLS_BOUNCE, N_WALL_MODES };
+extern int wallMode;
 extern bool shake;         /* The playfield shakes when somebody crashes (3DS) */
 #ifdef __3DS__
 extern unsigned long long shopOwned; /* Bit mask of the items bought in the shop */

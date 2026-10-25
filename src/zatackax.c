@@ -37,6 +37,9 @@
 
 static const unsigned int FPS_CAP = 100;
 
+/* In the bounce mode a head turns back this far from the edge. */
+#define BOUNCE_EDGE 2
+
 /* A computer player uses a weapon that it found much sooner than one it was
  * given at the start. */
 #ifdef __3DS__
@@ -815,7 +818,7 @@ void addToHitMap(unsigned int x, unsigned int y, unsigned char player,
                                 player, xpx, ypx);
                     return;
                 }
-            } else if (!wrapWalls) {
+            } else if (wallMode != WALLS_WRAP) {
                 if (olvl >= O_VERBOSE)
                     printf("Player %d hit the wall!\n", player);
                 if (olvl >= O_DEBUG)
@@ -1089,7 +1092,8 @@ int logicGame(void)
                     */
 
                     char c = pollAi(p->posx, p->posy, p->dir, p->active,
-                                    hitmap, WINDOW_W, WINDOW_H, p->aiLevel, wrapWalls);
+                                    hitmap, WINDOW_W, WINDOW_H, p->aiLevel,
+                                    wallMode == WALLS_WRAP);
 #ifdef __3DS__
                     /* With nothing in the way, an empty hand goes for an item. */
                     int tx, ty;
@@ -1133,8 +1137,8 @@ int logicGame(void)
                 p->posx += ZATA_SPEED * cos(p->dir) * mdelta * p->speed;
                 p->posy += ZATA_SPEED * sin(p->dir) * mdelta * p->speed;
 
-                /* Without walls one comes out on the other side. */
-                if (wrapWalls) {
+                if (wallMode == WALLS_WRAP) {
+                    /* Without walls one comes out on the other side. */
                     if (p->posx < 0)
                         p->posx += WINDOW_W;
                     else if (p->posx >= WINDOW_W)
@@ -1143,6 +1147,23 @@ int logicGame(void)
                         p->posy += WINDOW_H;
                     else if (p->posy >= WINDOW_H)
                         p->posy -= WINDOW_H;
+                } else if (wallMode == WALLS_BOUNCE) {
+                    /* The walls throw one back, like light off a mirror. */
+                    const double edge = BOUNCE_EDGE;
+                    if (p->posx < edge) {
+                        p->posx = edge;
+                        p->dir = M_PI - p->dir;
+                    } else if (p->posx > WINDOW_W - 1 - edge) {
+                        p->posx = WINDOW_W - 1 - edge;
+                        p->dir = M_PI - p->dir;
+                    }
+                    if (p->posy < edge) {
+                        p->posy = edge;
+                        p->dir = -p->dir;
+                    } else if (p->posy > WINDOW_H - 1 - edge) {
+                        p->posy = WINDOW_H - 1 - edge;
+                        p->dir = -p->dir;
+                    }
                 }
 
                 curx = (unsigned int)p->posx;
@@ -1601,7 +1622,7 @@ static void drawFieldExtras(void)
         framed = true;
     }
 #endif
-    if (framed && !wrapWalls) {
+    if (framed && wallMode != WALLS_WRAP) {
         SDL_Rect leftBorder = {0, 0, 1, WINDOW_H};
         SDL_Rect rightBorder = {WINDOW_W - 1, 0, WINDOW_W, WINDOW_H};
         SDL_Rect topBorder = {0, 0, WINDOW_W, 1};
@@ -1914,7 +1935,8 @@ static bool slotsPacked = false;
  * the host's. */
 static struct {
     unsigned int scorecap;
-    bool holes, duelmode, weapons, wrap;
+    bool holes, duelmode, weapons;
+    int walls;
     int gameSpeed;
 } savedRules;
 static bool netRulesSaved = false;
@@ -1928,14 +1950,15 @@ static void saveLineupSettings(void)
     if (tournamentActive())
         tournamentSwapRules();
     unsigned cap = scorecap;
-    bool h = holes, d = duelmode, w = weapons, wr = wrapWalls;
+    bool h = holes, d = duelmode, w = weapons;
+    int wr = wallMode;
     int speed = gameSpeed;
     if (netRulesSaved) {
         scorecap = savedRules.scorecap;
         holes = savedRules.holes;
         duelmode = savedRules.duelmode;
         weapons = savedRules.weapons;
-        wrapWalls = savedRules.wrap;
+        wallMode = savedRules.walls;
         gameSpeed = savedRules.gameSpeed;
     }
     saveSettings();
@@ -1944,7 +1967,7 @@ static void saveLineupSettings(void)
         holes = h;
         duelmode = d;
         weapons = w;
-        wrapWalls = wr;
+        wallMode = wr;
         gameSpeed = speed;
     }
     if (tournamentActive())
@@ -2020,7 +2043,7 @@ void restoreSlots(void)
         holes = savedRules.holes;
         duelmode = savedRules.duelmode;
         weapons = savedRules.weapons;
-        wrapWalls = savedRules.wrap;
+        wallMode = savedRules.walls;
         gameSpeed = savedRules.gameSpeed;
         netRulesSaved = false;
     }
@@ -2106,7 +2129,7 @@ void startNetGame(const struct netSeat *seats, int n, int role,
         savedRules.holes = holes;
         savedRules.duelmode = duelmode;
         savedRules.weapons = weapons;
-        savedRules.wrap = wrapWalls;
+        savedRules.walls = wallMode;
         savedRules.gameSpeed = gameSpeed;
         netRulesSaved = true;
     }
@@ -2115,7 +2138,7 @@ void startNetGame(const struct netSeat *seats, int n, int role,
     duelmode = duel;
     gameSpeed = speed;
     weapons = false;
-    wrapWalls = false;
+    wallMode = WALLS_SOLID;
 
     int remote = 0;
     for (int k = 0; k < MAX_PLAYERS; ++k) {
@@ -2941,7 +2964,7 @@ static const char *const ruleHelp[N_RULE_ROWS][4] = {
      "ITEMS: COLLECT THEM ON THE FIELD.", NULL},
     {"GAPS IN THE TRAILS THAT YOU CAN DRIVE", "THROUGH.", NULL, NULL},
     {"SOLID: THE WALL STOPS YOU.", "WRAP: THERE IS NO WALL, YOU COME OUT ON",
-     "THE OTHER SIDE OF THE FIELD.", NULL},
+     "THE OTHER SIDE OF THE FIELD.", "BOUNCE: THE WALL THROWS YOU BACK."},
     {"EXACTLY TWO PLAYERS START FACE TO FACE", "IN THE MIDDLE OF THE FIELD. WITH MORE",
      "PLAYERS, ONLY THE FIRST TWO PLAY.", NULL},
     {"HOW FAST EVERYONE MOVES AND TURNS.", NULL, NULL, NULL},
@@ -2994,7 +3017,7 @@ static void ruleChange(int row, int dir)
         holes = !holes;
         break;
     case RULE_WALLS:
-        wrapWalls = !wrapWalls;
+        wallMode = (wallMode + dir + N_WALL_MODES) % N_WALL_MODES;
         break;
     case RULE_DUEL:
         duelmode = !duelmode;
@@ -3160,8 +3183,8 @@ static void drawRulesBottom(void)
             drawSwitch(r, RULE_HOLES, holes);
             break;
         case RULE_WALLS: {
-            const char *labels[2] = {"SOLID", "WRAP"};
-            drawChoice(r, RULE_WALLS, 56, 2, labels, wrapWalls ? 1 : 0, 0x3);
+            const char *labels[N_WALL_MODES] = {"SOLID", "WRAP", "BOUNCE"};
+            drawChoice(r, RULE_WALLS, 56, N_WALL_MODES, labels, wallMode, 0x7);
             break;
         }
         case RULE_DUEL:
@@ -3930,9 +3953,9 @@ static void touchRules(int id, int value, bool released)
         ruleChange(id, 1);
         break;
     case RULE_WALLS:
-        if (value == 0 || value == 1) {
+        if (value >= 0 && value < N_WALL_MODES) {
             playSound(SOUND_BEEP, sound);
-            wrapWalls = value == 1;
+            wallMode = value;
         }
         break;
     case RULE_SPEED:

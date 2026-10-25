@@ -45,21 +45,21 @@ int main(void)
     players[2].color = 17;
     stats = (struct stats){4, 2, 30, 12, 5};
     itemMode = true;
-    wrapWalls = true;
+    wallMode = WALLS_BOUNCE;
     assert(saveSettings());
 
     shopOwned = 0;
     shopTheme = shopFrame = shopBlast = -1;
     memset(&stats, 0, sizeof(stats));
     itemMode = false;
-    wrapWalls = false;
+    wallMode = WALLS_SOLID;
     memset(players, 0, sizeof(players));
     restoreSettings();
     assert(shopOwned == ((1ull << 50) | 5));
     assert(shopTheme == 3 && shopFrame == 22 && shopBlast == 12);
     assert(players[0].headStyle == 3);
     assert(players[2].color == 17);
-    assert(itemMode && wrapWalls);
+    assert(itemMode && wallMode == WALLS_BOUNCE);
     assert(stats.matches == 4 && stats.roundWins == 12 && stats.bestStreak == 5);
 #endif
 
