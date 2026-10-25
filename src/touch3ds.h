@@ -28,6 +28,8 @@ struct touchTarget {
     int value;
 };
 
+/* Presses the A button for the page, as a touch on a row does. */
+void touchPressA(void);
 void touchReset(void);
 void touchAdd(SDL_Rect rect, int id, int value);
 

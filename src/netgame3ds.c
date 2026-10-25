@@ -100,6 +100,7 @@ void netGameBegin(const struct member members[NET_MAX_NODES],
         struct netSeat *s = &seats[n];
         snprintf(s->name, sizeof(s->name), "%s", m->name);
         s->color = m->color % N_COLORS;
+        s->head = m->head;
         s->node = i;
         s->local = i == node;
         colorUsed[s->color] = true;
@@ -114,7 +115,7 @@ void netGameBegin(const struct member members[NET_MAX_NODES],
         snprintf(s->name, sizeof(s->name), "AI %d", k + 1);
         s->ai = true;
         int c = 0;
-        while (c < N_COLORS - 1 && colorUsed[c])
+        while (c < N_BASE_COLORS - 1 && colorUsed[c])
             ++c;
         s->color = c;
         colorUsed[c] = true;
@@ -199,11 +200,8 @@ bool netGameReadyComplete(void)
 
 static unsigned readyRemaining(void)
 {
-    Uint32 now = SDL_GetTicks();
-    if (role == NET_ROLE_HOST)
-        return now < readyDeadline ? readyDeadline - now : 0;
-    Uint32 gone = now - readyRecvTime;
-    return gone < readyLeftRecv ? readyLeftRecv - gone : 0;
+    return readyTimeLeft(role == NET_ROLE_HOST, readyDeadline, readyLeftRecv,
+                         readyRecvTime);
 }
 
 static int bits(unsigned v)
@@ -351,7 +349,7 @@ static int clientTick(Uint32 now)
     ++statFrames;
     if (now - statStart >= 2000) {
         fprintf(stderr, "net client: %u snapshots, %u missing, %u frames in %u ms\n",
-                statSnaps, statLate, statFrames, now - statStart);
+                statSnaps, statLate, statFrames, (unsigned)(now - statStart));
         statStart = now;
         statSnaps = statLate = statFrames = 0;
     }

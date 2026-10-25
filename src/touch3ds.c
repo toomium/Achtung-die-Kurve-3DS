@@ -2,10 +2,17 @@
 
 #include "touch3ds.h"
 
+#include "input.h"
+
 #define MAX_TARGETS 40
 
 static struct touchTarget targets[MAX_TARGETS];
 static int count = 0;
+
+void touchPressA(void)
+{
+    joyButtonDown[0][N3DS_BUTTON_A] = true;
+}
 
 void touchReset(void)
 {

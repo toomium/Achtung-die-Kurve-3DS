@@ -11,7 +11,9 @@
 #include "common.h"
 
 #ifdef __3DS__
+#ifndef CONFIG_DIR_3DS
 #define CONFIG_DIR_3DS "sdmc:/3ds/zatackax"
+#endif
 #define SETTINGS_FILE_SIZE 1024
 #endif
 #include "player.h"
@@ -41,10 +43,17 @@ extern bool border;
 extern bool duelmode;
 extern bool debugLog;      /* Write sdmc:/zatackax.log (3DS), set in settings.cfg only */
 extern bool shake;         /* The playfield shakes when somebody crashes (3DS) */
+#ifdef __3DS__
+extern unsigned long long shopOwned; /* Bit mask of the items bought in the shop */
+extern int shopTheme;      /* The playfield theme in use, -1 for the normal one */
+extern int shopFrame;      /* The frame color in use, -1 for the normal one */
+extern int shopBlast;      /* The crash effect in use, -1 for the normal one */
+extern int testCoins;      /* Play Coins for a console without them, -1 for off */
+#endif
 
 int ensureConfigPath(void);
 char *getConfigFile(void);
-void saveSettings(void);
+bool saveSettings(void);
 void restoreSettings(void);
 
 #endif

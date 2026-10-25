@@ -15,6 +15,9 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <strings.h>
+#include <time.h>
+
 #include "zatackax.h"
 
 #ifdef __3DS__
@@ -24,12 +27,26 @@
 #include "netmenu3ds.h"
 #include "netgame3ds.h"
 #include "demo3ds.h"
+#include "shop3ds.h"
+#include "slotmenu3ds.h"
 #endif
 
 static const unsigned int FPS_CAP = 100;
 
+/* The background of the playfield: a theme from the shop on the 3DS. */
+#ifdef __3DS__
+#define clearPlayfield(s) shopClearPlayfield(s)
+#else
+#define clearPlayfield(s) clearBackground(s)
+#endif
+
+/* On the 3DS: 0 PLAY, 1 OPTIONS, 2 EXIT, 3 SHOP. */
 struct menu menuMain = {
+#ifdef __3DS__
+    4,
+#else
     3,
+#endif
     0,
 };
 
@@ -244,18 +261,38 @@ void initPlayers2(void)
  *
  * @param player ID of the player to be reset.
  */
+static const char *const colorNames[N_COLORS] = {
+    "Red", "Blue", "Green", "Yellow", "Pink", "Cyan", "White", "Orange"
+#ifdef __3DS__
+    , "Purple", "Rose", "Teal", "Lime", "Gold", "Violet", "Sky", "Coral",
+    "Mint", "Peach", "Lavender", "Crimson", "Tan", "Silver", "Azure", "Olive"
+#endif
+};
+
+const char *colorName(int color)
+{
+    return colorNames[color % N_COLORS];
+}
+
+/* A name that is just the name of a color: the player has not chosen one. */
+bool nameIsDefault(const char *name)
+{
+    for (int i = 0; i < N_COLORS; ++i) {
+        if (strcasecmp(name, colorNames[i]) == 0)
+            return true;
+    }
+    return false;
+}
+
 void resetPlayer(int player)
 {
-    char *defaultNames[] = {"Red", "Blue", "Green", "Yellow",
-                            "Pink", "Cyan", "White", "Orange"};
-
     struct player *p = &(players[player]);
     p->color = player;
     p->speed = 1.0;
     p->invertedKeys = false;
     p->weapon = false;
     p->ai = false;
-    strncpy(p->name, defaultNames[player], PLAYER_NAME_LEN - 1);
+    strncpy(p->name, colorNames[player], PLAYER_NAME_LEN - 1);
 
     switch (player) {
     case 0:
@@ -310,8 +347,8 @@ void deselectWeapons(void)
  */
 SDL_Color *extractPColors(void)
 {
-    SDL_Color *pcolors = malloc(sizeof(SDL_Color) * N_COLORS);
-    for (int i = 0; i < N_COLORS; ++i)
+    SDL_Color *pcolors = malloc(sizeof(SDL_Color) * MAX_PLAYERS);
+    for (int i = 0; i < MAX_PLAYERS; ++i)
         pcolors[i] = colors[players[i].color];
     return pcolors;
 }
@@ -375,6 +412,9 @@ void killPlayer(unsigned char victim, unsigned char killer)
 
     if (particleEffects) {
         SDL_Color color = colors[p->color];
+#ifdef __3DS__
+        shopCrashBurst(p->posx, p->posy, p->dir, color);
+#else
         addParticles(50,
                      p->posx, p->posy,
                      0, 0.5,
@@ -383,6 +423,7 @@ void killPlayer(unsigned char victim, unsigned char killer)
                      color.r, color.r,
                      color.b, color.b,
                      color.g, color.g);
+#endif
     }
 
     refreshGameScreen(); /* Update scores */
@@ -1113,7 +1154,7 @@ int logicGame(void)
 void displayGame(void)
 {
     useTopView();
-    clearBackground(screen);
+    clearPlayfield(screen);
 
 #ifdef __3DS__
     SDL_Rect shaken = {shakeX, shakeY, 0, 0};
@@ -1128,6 +1169,9 @@ void displayGame(void)
     }
 
     SDL_BlitSurface(gameScreen, NULL, screen, at);
+#ifdef __3DS__
+    shopDrawHeads(screen, shaken);
+#endif
 
     if (presentFrame() == -1) {
         exit(1);
@@ -1185,7 +1229,7 @@ static bool startPageStale = true;
 void displayGameStart(void)
 {
     useTopView();
-    clearBackground(screen);
+    clearPlayfield(screen);
     clearSurface(gameScreen);
 
 #ifdef __3DS__
@@ -1376,10 +1420,13 @@ void displayResume(void)
 {
     /* The field as it was, with the number over it. */
     useTopView();
-    clearBackground(screen);
+    clearPlayfield(screen);
     if (particleEffects && hasParticles())
         SDL_BlitSurface(particleScreen, NULL, screen, NULL);
     SDL_BlitSurface(gameScreen, NULL, screen, NULL);
+#ifdef __3DS__
+    shopDrawHeads(screen, (SDL_Rect){0, 0, 0, 0});
+#endif
 
     int digit = (resumeLeft + RESUME_STEP - 1) / RESUME_STEP;
     SDL_Color shadow = {0x12, 0x16, 0x2E, 0};
@@ -1502,16 +1549,25 @@ void displayPause(void)
  */
 static void drawFieldExtras(void)
 {
-    if (border) {
-        Uint32 white = SDL_MapRGB(gameScreen->format, 0xFF, 0xFF, 0xFF);
+    Uint32 frame = SDL_MapRGB(gameScreen->format, 0xFF, 0xFF, 0xFF);
+    bool framed = border;
+#ifdef __3DS__
+    /* A frame bought in the shop is drawn even if the border is off. */
+    SDL_Color chosen;
+    if (shopFrameColor(&chosen)) {
+        frame = SDL_MapRGB(gameScreen->format, chosen.r, chosen.g, chosen.b);
+        framed = true;
+    }
+#endif
+    if (framed) {
         SDL_Rect leftBorder = {0, 0, 1, WINDOW_H};
         SDL_Rect rightBorder = {WINDOW_W - 1, 0, WINDOW_W, WINDOW_H};
         SDL_Rect topBorder = {0, 0, WINDOW_W, 1};
         SDL_Rect bottomBorder = {0, WINDOW_H - 1, WINDOW_W, WINDOW_H};
-        SDL_FillRect(gameScreen, &leftBorder, white);
-        SDL_FillRect(gameScreen, &rightBorder, white);
-        SDL_FillRect(gameScreen, &topBorder, white);
-        SDL_FillRect(gameScreen, &bottomBorder, white);
+        SDL_FillRect(gameScreen, &leftBorder, frame);
+        SDL_FillRect(gameScreen, &rightBorder, frame);
+        SDL_FillRect(gameScreen, &topBorder, frame);
+        SDL_FillRect(gameScreen, &bottomBorder, frame);
     }
 
     /* Active weapons */
@@ -1807,7 +1863,7 @@ static bool netRulesSaved = false;
 
 /* The slot and the row that the cursor is on, on the lineup page, and the row on
  * the rules and options pages. */
-static int lobbySlot = 0;
+int lobbySlot = 0;
 static int lobbyRow = 0;
 static int rulesRow = 0;
 static int optionsRow = 0;
@@ -1842,6 +1898,9 @@ static void packSlots(int n, const int idx[MAX_PLAYERS])
         if (k < n) {
             players[k] = slotBackup[idx[k]];
             players[k].ai = slotMode[idx[k]] == SLOT_AI;
+            /* The computer wears nothing, a human only what was bought. */
+            players[k].headStyle = players[k].ai
+                ? 0 : shopOwnedHead(players[k].headStyle);
         } else {
             players[k] = slotBackup[k];
             players[k].active = 0;
@@ -1958,6 +2017,7 @@ void startNetGame(const struct netSeat *seats, int n, int role,
         struct player *p = &players[k];
         snprintf(p->name, PLAYER_NAME_LEN, "%s", seats[k].name);
         p->color = seats[k].color;
+        p->headStyle = seats[k].head;
         p->ai = seats[k].ai;
         p->speed = 1.0;
         p->invertedKeys = false;
@@ -2048,9 +2108,7 @@ static void netCrashEffect(int victim, int killer)
         shakeLeft = SHAKE_TIME;
     if (particleEffects) {
         SDL_Color color = colors[p->color];
-        addParticles(50, p->posx, p->posy, 0, 0.5, p->dir + M_PI - M_PI_4,
-                     p->dir + M_PI + M_PI_4, 1, 1, 0.0005, color.r, color.r,
-                     color.b, color.b, color.g, color.g);
+        shopCrashBurst(p->posx, p->posy, p->dir, color);
     }
 }
 
@@ -2061,6 +2119,14 @@ void netApplyFrame(int gstate, int cd, int winner,
 {
     if (n > nPlayers)
         n = nPlayers;
+    /* The host is another console: take nothing outside the field. */
+    for (int i = 0; i < n; ++i) {
+        if (!(f[i].x >= 0 && f[i].x < WINDOW_W && f[i].y >= 0
+              && f[i].y < WINDOW_H))
+            return;
+    }
+    if (winner < -1 || winner >= nPlayers)
+        winner = -1;
 
     if (gstate == GS_COUNTDOWN && netPrevGs != GS_COUNTDOWN) {
         clearSurface(gameScreen);
@@ -2158,22 +2224,32 @@ int logicMainMenu(void)
         case 2:
             exitGame(0);
             break;
+        case 3:
+            playSound(SOUND_BEEP, sound);
+            shopEnter(&mainMenu);
+            break;
         }
         return 1;
     }
 
+    /* PLAY above SHOP and OPTIONS, EXIT at the bottom. */
     int old = menuMain.choice;
     if (menuButtonQuery(KEY_DOWN)) {
         if (menuMain.choice == 0)
-            menuMain.choice = 1;
-    } else if (menuButtonQuery(KEY_UP)) {
-        menuMain.choice = 0;
-    } else if (menuButtonQuery(KEY_RIGHT)) {
-        if (menuMain.choice == 1)
+            menuMain.choice = 3;
+        else if (menuMain.choice == 3 || menuMain.choice == 1)
             menuMain.choice = 2;
-    } else if (menuButtonQuery(KEY_LEFT)) {
+    } else if (menuButtonQuery(KEY_UP)) {
         if (menuMain.choice == 2)
+            menuMain.choice = 3;
+        else
+            menuMain.choice = 0;
+    } else if (menuButtonQuery(KEY_RIGHT)) {
+        if (menuMain.choice == 3)
             menuMain.choice = 1;
+    } else if (menuButtonQuery(KEY_LEFT)) {
+        if (menuMain.choice == 1)
+            menuMain.choice = 3;
     }
 
     if (menuMain.choice != old) {
@@ -2189,17 +2265,21 @@ void displayMainMenu(void)
     useBottomView();
     clearBackground(screen);
 
-    SDL_Rect play = {16, 16, 288, 96};
-    SDL_Rect options = {16, 128, 140, 72};
-    SDL_Rect quit = {164, 128, 140, 72};
+    SDL_Rect play = {16, 12, 288, 76};
+    SDL_Rect shop = {16, 96, 140, 64};
+    SDL_Rect options = {164, 96, 140, 64};
+    SDL_Rect quit = {16, 168, 288, 44};
 
     touchReset();
     touchAdd(play, 0, TOUCH_ROW);
+    touchAdd(shop, 3, TOUCH_ROW);
     touchAdd(options, 1, TOUCH_ROW);
     touchAdd(quit, 2, TOUCH_ROW);
 
     uiTile(screen, play, "PLAY", NULL, uiIconPlay, uiColGreen,
            menuMain.choice == 0, true);
+    uiTile(screen, shop, "SHOP", NULL, uiIconShop, uiColAccent,
+           menuMain.choice == 3, true);
     uiTile(screen, options, "OPTIONS", NULL, uiIconOptions, uiColBlue,
            menuMain.choice == 1, true);
     uiTile(screen, quit, "EXIT", NULL, uiIconExit, uiColRed,
@@ -2263,17 +2343,18 @@ void displayModeMenu(void)
 }
 
 /* The rows below the slots. Which are shown depends on the slot. */
-enum { ROW_STATE, ROW_NAME, ROW_LEFT, ROW_RIGHT, ROW_WEAPON, ROW_GO };
+enum { ROW_STATE, ROW_NAME, ROW_TRAIL, ROW_HEAD, ROW_CONTROLS, ROW_GO };
 
 static int lobbyRows(int slot, int rows[6])
 {
     int n = 0;
     rows[n++] = ROW_STATE;
     rows[n++] = ROW_NAME;
+    if (slotMode[slot] != SLOT_OFF)
+        rows[n++] = ROW_TRAIL;
     if (slotMode[slot] == SLOT_HUMAN) {
-        rows[n++] = ROW_LEFT;
-        rows[n++] = ROW_RIGHT;
-        rows[n++] = ROW_WEAPON;
+        rows[n++] = ROW_HEAD;
+        rows[n++] = ROW_CONTROLS;
     }
     rows[n++] = ROW_GO;
     return n;
@@ -2350,6 +2431,38 @@ static void assignHumanButtons(int slot)
     }
 }
 
+bool slotColorTaken(int slot, int color)
+{
+    for (int i = 0; i < MAX_PLAYERS; ++i) {
+        if (i != slot && slotMode[i] != SLOT_OFF && players[i].color == color)
+            return true;
+    }
+    return false;
+}
+
+void setSlotColor(int slot, int color)
+{
+    struct player *p = &players[slot];
+    bool followName = nameIsDefault(p->name);
+
+    p->color = color;
+    if (followName)
+        snprintf(p->name, sizeof(p->name), "%s", colorName(color));
+}
+
+/* A slot that joins takes a free color if its own is in use. */
+static void claimColor(int slot)
+{
+    bool usable = !slotColorTaken(slot, players[slot].color)
+        && shopColorOwned(players[slot].color);
+    for (int c = 0; !usable && c < N_COLORS; ++c) {
+        if (!slotColorTaken(slot, c) && shopColorOwned(c)) {
+            setSlotColor(slot, c);
+            usable = true;
+        }
+    }
+}
+
 /**
  * Next state of a slot: OFF, AI, human, OFF... At most MAX_HUMANS humans, after
  * that a slot goes from AI to OFF.
@@ -2358,6 +2471,7 @@ static void cycleSlot(int slot)
 {
     if (slotMode[slot] == SLOT_OFF) {
         slotMode[slot] = SLOT_AI;
+        claimColor(slot);
     } else if (slotMode[slot] == SLOT_AI && humanCount(slot) < MAX_HUMANS) {
         slotMode[slot] = SLOT_HUMAN;
         assignHumanButtons(slot);
@@ -2386,6 +2500,10 @@ void lobbyStart(void)
         playSound(SOUND_BEP, sound);
         return;
     }
+    for (int i = 0; i < MAX_PLAYERS; ++i) {
+        if (slotMode[i] != SLOT_OFF)
+            claimColor(i);
+    }
     playSound(SOUND_BEEP, sound);
     saveSettings();
     rulesRow = 0;
@@ -2405,22 +2523,18 @@ static void lobbyActivate(int row)
         playSound(SOUND_BEEP, sound);
         setNextName(slot);
         break;
-    case ROW_LEFT:
-    case ROW_RIGHT:
-    case ROW_WEAPON: {
+    case ROW_TRAIL:
         playSound(SOUND_BEEP, sound);
-        struct player *p = &players[slot];
-        char which = row == ROW_LEFT ? 'l' : row == ROW_RIGHT ? 'r' : 'w';
-        if (which == 'l')
-            p->lkey = SDLK_CLEAR;
-        else if (which == 'r')
-            p->rkey = SDLK_CLEAR;
-        else
-            p->wkey = SDLK_CLEAR;
-        displayLobby(); /* Show that a button is awaited */
-        setNextKey(slot, which);
+        slotMenuOpen(SLOTMENU_TRAIL, slot);
         break;
-    }
+    case ROW_HEAD:
+        playSound(SOUND_BEEP, sound);
+        slotMenuOpen(SLOTMENU_HEAD, slot);
+        break;
+    case ROW_CONTROLS:
+        playSound(SOUND_BEEP, sound);
+        slotMenuOpen(SLOTMENU_CONTROLS, slot);
+        break;
     case ROW_GO:
         lobbyStart();
         break;
@@ -2480,7 +2594,7 @@ static void slotStateName(char *buf, int slot, int mode)
 }
 
 /* The eight slots on the top screen, two rows of four. */
-static void drawLobbyTop(void)
+void drawLobbyTop(void)
 {
     const int w = 88, h = 100, gap = 8, x0 = 12, y0 = 14;
 
@@ -2520,7 +2634,8 @@ SDL_Rect lobbyRowPanel(int y, bool focused, const char *label)
     SDL_Rect r = {16, y, 288, 26};
     uiPanel(screen, r, uiColPanel,
             focused ? uiColAccent : uiMix(uiColPanel, uiColDim, 50));
-    uiText(screen, FONT_BROADCAST, label, uiColDim, r.x + 10, r.y + 9, UI_LEFT);
+    uiText(screen, FONT_BROADCAST, label, uiColDim, r.x + 10,
+           r.y + (r.h - 8) / 2, UI_LEFT);
     return r;
 }
 
@@ -2531,7 +2646,7 @@ static void drawStateButtons(SDL_Rect row, int slot, int mode)
     for (int i = 0; i < 3; ++i) {
         /* Right aligned, 10 pixels from the edge: 3 buttons of 48, gaps of 4. */
         SDL_Rect b = {row.x + row.w - 10 - (3 * 48 + 2 * 4) + i * 52,
-                      row.y + 3, 48, 20};
+                      row.y + 3, 48, row.h - 6};
         touchAdd(b, ROW_STATE, modes[i]);
         SDL_Color c = slotStateColor(modes[i]);
         bool active = modes[i] == mode;
@@ -2540,7 +2655,8 @@ static void drawStateButtons(SDL_Rect row, int slot, int mode)
         char name[4];
         slotStateName(name, slot, modes[i]);
         uiText(screen, FONT_BROADCAST, name,
-               active ? c : uiMix(uiColPanel, c, 55), b.x + b.w / 2, b.y + 6,
+               active ? c : uiMix(uiColPanel, c, 55), b.x + b.w / 2,
+               b.y + (b.h - 8) / 2,
                UI_CENTER);
     }
 }
@@ -2578,8 +2694,6 @@ static void drawLobbyBottom(void)
     int y = 34;
     for (int i = 0; i < n; ++i) {
         bool focused = i == lobbyRow;
-        const char *value = NULL;
-        char *buttonText = NULL;
 
         switch (rows[i]) {
         case ROW_STATE: {
@@ -2594,27 +2708,38 @@ static void drawLobbyBottom(void)
             SDL_Rect r = lobbyRowPanel(y, focused, "NAME");
             touchAdd(r, ROW_NAME, TOUCH_ROW);
             uiText(screen, FONT_MENU, p->name, colors[p->color], r.x + r.w - 10,
-                   r.y + 5, UI_RIGHT);
+                   r.y + (r.h - 16) / 2, UI_RIGHT);
             if (focused)
                 action = "EDIT";
             break;
         }
-        case ROW_LEFT:
-        case ROW_RIGHT:
-        case ROW_WEAPON: {
-            button b = rows[i] == ROW_LEFT ? p->lkey
-                : rows[i] == ROW_RIGHT ? p->rkey : p->wkey;
-            const char *label = rows[i] == ROW_LEFT ? "LEFT"
-                : rows[i] == ROW_RIGHT ? "RIGHT" : "WEAPON";
-            SDL_Rect r = lobbyRowPanel(y, focused, label);
-            touchAdd(r, rows[i], TOUCH_ROW);
-            buttonText = buttonName(b);
-            value = buttonText[0] != '\0' ? buttonText : "...";
-            uiText(screen, FONT_MENU, value, uiColText, r.x + r.w - 10, r.y + 5,
-                   UI_RIGHT);
-            free(buttonText);
+        case ROW_TRAIL: {
+            SDL_Rect r = lobbyRowPanel(y, focused, "TRAIL");
+            touchAdd(r, ROW_TRAIL, TOUCH_ROW);
+            uiText(screen, FONT_MENU, colorName(p->color), colors[p->color],
+                   r.x + r.w - 10, r.y + (r.h - 16) / 2, UI_RIGHT);
             if (focused)
-                action = "BIND";
+                action = "OPEN";
+            break;
+        }
+        case ROW_HEAD: {
+            SDL_Rect r = lobbyRowPanel(y, focused, "HEAD");
+            touchAdd(r, ROW_HEAD, TOUCH_ROW);
+            unsigned char style = shopOwnedHead(p->headStyle);
+            uiText(screen, FONT_MENU, shopHeadName(style),
+                   style ? uiColAccent : uiColText, r.x + r.w - 10,
+                   r.y + (r.h - 16) / 2, UI_RIGHT);
+            if (focused)
+                action = "OPEN";
+            break;
+        }
+        case ROW_CONTROLS: {
+            SDL_Rect r = lobbyRowPanel(y, focused, "CONTROLS");
+            touchAdd(r, ROW_CONTROLS, TOUCH_ROW);
+            uiText(screen, FONT_MENU, ">", uiColAccent, r.x + r.w - 10,
+                   r.y + (r.h - 16) / 2, UI_RIGHT);
+            if (focused)
+                action = "OPEN";
             break;
         }
         case ROW_GO: {
@@ -3494,12 +3619,6 @@ void displayMatchEnd(void)
 
 /* ---- Touch ---- */
 
-/* Press the A button for the page: its logic acts on the selected row. */
-static void touchPressA(void)
-{
-    joyButtonDown[0][N3DS_BUTTON_A] = true;
-}
-
 static void touchTitle(int id, int value, bool released)
 {
     (void)id;
@@ -3665,6 +3784,7 @@ static void initTouch(void)
     mainMenu.touchFunc = touchMainMenu;
     modeMenu.touchFunc = touchModeMenu;
     lobbyMenu.touchFunc = touchLobby;
+    slotMenusInit(&lobbyMenu);
     rulesMenu.touchFunc = touchRules;
     wepMenu.touchFunc = touchWep;
     pauseMenu.touchFunc = touchPause;
@@ -4568,7 +4688,7 @@ int init(void)
     atexit(TTF_Quit);
 
     cleanBroadcasts();
-    srand(SDL_GetTicks());
+    srand(time(NULL) ^ SDL_GetTicks());
 
     SDL_ShowCursor(SDL_DISABLE);
     SDL_WM_SetCaption("Zatacka X", "Zatacka X");

@@ -13,6 +13,8 @@
 #include "netgame3ds.h"
 #include "netproto3ds.h"
 #include "player.h"
+#include "shop3ds.h"
+#include "slotmenu3ds.h"
 #include "sound.h"
 #include "touch3ds.h"
 #include "ui3ds.h"
@@ -36,13 +38,17 @@ static struct scene readyScene;
 
 static const char *message = NULL;      /* Shown in red when something failed */
 
-/* ---- Helpers ---- */
+/* What searchers can see of a group. The last number goes up whenever a message
+ * changes, so that consoles with another version stay apart. */
+static const unsigned char groupInfo[] = {'Z', 'X', 2};
 
-/* Presses the A button for the page, as touch does elsewhere. */
-static void touchPressA(void)
+static bool sameVersion(const struct netGroup *g)
 {
-    joyButtonDown[0][N3DS_BUTTON_A] = true;
+    return g->appdataSize == sizeof(groupInfo)
+        && memcmp(g->appdata, groupInfo, sizeof(groupInfo)) == 0;
 }
+
+/* ---- Helpers ---- */
 
 static void showMessage(const char *text)
 {
@@ -69,8 +75,7 @@ static void startHosting(void)
     }
 
     /* What searchers can see of the group. */
-    const unsigned char info[] = {'Z', 'X', 1};
-    if (!netHost(info, sizeof(info), NET_MAX_NODES)) {
+    if (!netHost(groupInfo, sizeof(groupInfo), NET_MAX_NODES)) {
         fprintf(stderr, "net: host failed 0x%08x\n", netLastError());
         showMessage("COULD NOT CREATE A GROUP");
         return;
@@ -179,6 +184,8 @@ static int logicBrowse(void)
         message = NULL;
         if (nGroups == 0) {
             wantRescan = true;
+        } else if (!sameVersion(&groups[browseSel])) {
+            showMessage("THAT CONSOLE HAS ANOTHER VERSION");
         } else if (netJoin(browseSel)) {
             playSound(SOUND_BEEP, sound);
             curScene = &lobbyScene;
@@ -239,8 +246,9 @@ static void displayBrowse(void)
         char count[8];
         snprintf(count, sizeof(count), "%d/%d", groups[i].nodes,
                  groups[i].maxNodes);
-        uiText(screen, FONT_MENU, count, uiColGreen, r.x + r.w - 10, r.y + 5,
-               UI_RIGHT);
+        bool same = sameVersion(&groups[i]);
+        uiText(screen, FONT_MENU, same ? count : "OLD", same ? uiColGreen : uiColRed,
+               r.x + r.w - 10, r.y + 5, UI_RIGHT);
     }
     drawMessage(206);
 
@@ -279,6 +287,7 @@ enum { PH_LOBBY, PH_RULES, PH_READY, PH_GAME };
 struct msgProfile {
     unsigned char type;
     unsigned char color;
+    unsigned char head;
     char name[PLAYER_NAME_LEN];
 };
 
@@ -299,7 +308,8 @@ static const unsigned pointChoices[] = {10, 20, 30, 40, 50, 100, 0};
 #define N_POINTS ((int)(sizeof(pointChoices) / sizeof(pointChoices[0])))
 const int speedChoices[N_SPEEDS] = {75, 100, 125, 150};
 
-enum { ROW_NAME, ROW_COLOR, ROW_LEFT, ROW_RIGHT, ROW_START, N_ROWS };
+enum { ROW_NAME, ROW_COLOR, ROW_HEAD, ROW_LEFT, ROW_RIGHT, ROW_START,
+       N_ROWS };
 enum { RULE_POINTS, RULE_HOLES, RULE_DUEL, RULE_SPEED, RULE_AI, RULE_GO,
        N_RULE_ROWS };
 #define TOUCH_SWATCH 10
@@ -323,7 +333,6 @@ static Uint32 readyRecvTime = 0;
 static int shownSeconds = -1;
 
 /* In zatackax.c: widgets of the rules page. */
-SDL_Rect lobbyRowPanel(int y, bool focused, const char *label);
 void drawChoice(SDL_Rect row, int id, int w, int n, const char *labels[],
                 int active, unsigned enabled);
 void drawSwitch(SDL_Rect row, int id, bool on);
@@ -354,7 +363,7 @@ static bool colorTaken(int color, int exceptNode)
 
 static int freeColor(void)
 {
-    for (int c = 0; c < N_COLORS; ++c) {
+    for (int c = 0; c < N_BASE_COLORS; ++c) {
         if (!colorTaken(c, 0))
             return c;
     }
@@ -363,10 +372,12 @@ static int freeColor(void)
 
 /* Host: takes over a node's profile. A color that someone else has is refused
  * (the node keeps its old one). */
-static void applyProfile(int node, int color, const char *name)
+static void applyProfile(int node, int color, const char *name,
+                         unsigned char head)
 {
     struct member *m = &members[node - 1];
 
+    m->head = head;
     if (color >= 0 && color < N_COLORS && !colorTaken(color, node))
         m->color = color;
     if (name != NULL && strncmp(m->name, name, PLAYER_NAME_LEN - 1) != 0)
@@ -396,11 +407,8 @@ static void hostMembers(void)
 
 static unsigned readyRemaining(void)
 {
-    Uint32 now = SDL_GetTicks();
-    if (netIsHost())
-        return now < readyDeadline ? readyDeadline - now : 0;
-    Uint32 gone = now - readyRecvTime;
-    return gone < readyLeftAtRecv ? readyLeftAtRecv - gone : 0;
+    return readyTimeLeft(netIsHost(), readyDeadline, readyLeftAtRecv,
+                         readyRecvTime);
 }
 
 static void sendState(void)
@@ -421,6 +429,7 @@ static void sendProfile(void)
     memset(&msg, 0, sizeof(msg));
     msg.type = MSG_PROFILE;
     msg.color = wantColor;
+    msg.head = shopOwnedHead(me()->headStyle);
     snprintf(msg.name, sizeof(msg.name), "%s", me()->name);
     netSend(NET_HOST_NODE, &msg, sizeof(msg));
 }
@@ -435,7 +444,8 @@ static void sendReady(void)
 static void profileChanged(void)
 {
     if (netIsHost()) {
-        applyProfile(NET_HOST_NODE, wantColor, me()->name);
+        applyProfile(NET_HOST_NODE, wantColor, me()->name,
+                     shopOwnedHead(me()->headStyle));
         wantColor = members[NET_HOST_NODE - 1].color;
     } else {
         sendProfile();
@@ -574,7 +584,7 @@ static bool receiveMessages(void)
                 memcpy(&msg, buf, sizeof(msg));
                 msg.name[PLAYER_NAME_LEN - 1] = '\0';
                 struct member before = members[from - 1];
-                applyProfile(from, msg.color, msg.name);
+                applyProfile(from, msg.color, msg.name, msg.head);
                 changed |= memcmp(&before, &members[from - 1],
                                   sizeof(before)) != 0;
             } else if (buf[0] == MSG_READY && phase == PH_READY
@@ -592,6 +602,8 @@ static bool receiveMessages(void)
                         || msg.phase != phase)
                     changed = true;
                 memcpy(members, msg.members, sizeof(members));
+                for (int i = 0; i < NET_MAX_NODES; ++i)
+                    members[i].name[PLAYER_NAME_LEN - 1] = '\0';
                 rules = msg.rules;
                 readyLeftAtRecv = msg.readyLeft;
                 readyRecvTime = SDL_GetTicks();
@@ -692,12 +704,21 @@ static void requestColor(int color)
         return;
     if (color == wantColor && members[node - 1].color == color)
         return;
+    if (!shopColorOwned(color)) {
+        message = "BUY THIS COLOR IN THE SHOP";
+        playSound(SOUND_BEP, sound);
+        return;
+    }
     if (colorTaken(color, node)) {
         playSound(SOUND_BEP, sound);
         return;
     }
+    message = NULL;
     playSound(SOUND_BEEP, sound);
     wantColor = color;
+    /* A name that is just a color's name follows the color. */
+    if (nameIsDefault(me()->name))
+        snprintf(me()->name, PLAYER_NAME_LEN, "%s", colorName(color));
     profileChanged();
 }
 
@@ -715,6 +736,14 @@ static void startRules(void)
     enterScene(&rulesScene);
 }
 
+/* The next head marker of the shop that this console owns. */
+static void cycleHead(int dir)
+{
+    me()->headStyle = shopCycleHead(shopOwnedHead(me()->headStyle), dir);
+    playSound(SOUND_BEEP, sound);
+    profileChanged();
+}
+
 static void lobbyActivate(void)
 {
     switch (lobbyRow) {
@@ -725,6 +754,9 @@ static void lobbyActivate(void)
         break;
     case ROW_COLOR:
         requestColor(colorCursor);
+        break;
+    case ROW_HEAD:
+        cycleHead(1);
         break;
     case ROW_LEFT:
     case ROW_RIGHT:
@@ -761,10 +793,16 @@ static int logicLobby(void)
         ++lobbyRow;
     else if (menuButtonQuery(KEY_UP) && lobbyRow > 0)
         --lobbyRow;
-    else if (lobbyRow == ROW_COLOR && menuButtonQuery(KEY_RIGHT))
-        colorCursor = (colorCursor + 1) % N_COLORS;
-    else if (lobbyRow == ROW_COLOR && menuButtonQuery(KEY_LEFT))
-        colorCursor = (colorCursor + N_COLORS - 1) % N_COLORS;
+    else {
+        int dir = menuButtonQuery(KEY_RIGHT) ? 1
+            : menuButtonQuery(KEY_LEFT) ? -1 : 0;
+        if (dir != 0 && lobbyRow == ROW_COLOR)
+            colorCursor = (colorCursor + dir + N_COLORS) % N_COLORS;
+        else if (dir != 0 && lobbyRow == ROW_HEAD) {
+            cycleHead(dir);
+            changed = true;
+        }
+    }
     if (lobbyRow != oldRow || colorCursor != oldCursor) {
         playSound(SOUND_BEEP, sound);
         changed = true;
@@ -859,24 +897,39 @@ static void displayLobby(void)
     uiText(screen, FONT_MENU, me()->name, colors[shownColor % N_COLORS],
            r.x + r.w - 10, r.y + 5, UI_RIGHT);
 
-    /* The colors in a row. Those of the others are dimmed. */
-    r = profileRow(40, 36, ROW_COLOR, "COLOR");
-    const int sw = 24, sgap = 3;
-    int x0 = r.x + r.w - 10 - (N_COLORS * sw + (N_COLORS - 1) * sgap);
-    for (int i = 0; i < N_COLORS; ++i) {
-        SDL_Rect s = {x0 + i * (sw + sgap), r.y + 6, sw, sw};
+    /* The colors in a row, eight at a time: the window follows the cursor.
+     * Those of the others are dimmed, those not bought have a lock. */
+    r = profileRow(40, 36, ROW_COLOR, "TRAIL");
+    const int sw = 24, sgap = 3, shown = 8;
+    int first = colorCursor - shown / 2;
+    if (first < 0)
+        first = 0;
+    if (first > N_COLORS - shown)
+        first = N_COLORS - shown;
+    int x0 = r.x + r.w - 10 - (shown * sw + (shown - 1) * sgap);
+    for (int k = 0; k < shown; ++k) {
+        int i = first + k;
+        SDL_Rect s = {x0 + k * (sw + sgap), r.y + 6, sw, sw};
         bool taken = colorTaken(i, mine);
+        bool owned = shopColorOwned(i);
         bool cursor = lobbyRow == ROW_COLOR && i == colorCursor;
         SDL_Color c = colors[i];
         touchAdd(s, TOUCH_SWATCH + i, 0);
-        uiPanel(screen, s, taken ? uiMix(uiColPanel, c, 25) : c,
+        uiPanel(screen, s, taken || !owned ? uiMix(uiColPanel, c, 25) : c,
                 i == shownColor ? uiColText
                 : cursor ? uiColAccent : uiMix(uiColPanel, c, 50));
+        if (!owned)
+            uiIcon(screen, uiIconLock, s.x + 4, s.y + 4, 2, uiColText);
     }
+
+    r = profileRow(82, 26, ROW_HEAD, "HEAD");
+    uiText(screen, FONT_MENU, shopHeadName(shopOwnedHead(me()->headStyle)),
+           shopOwnedHead(me()->headStyle) ? uiColAccent : uiColText,
+           r.x + r.w - 10, r.y + 5, UI_RIGHT);
 
     for (int row = ROW_LEFT; row <= ROW_RIGHT; ++row) {
         bool left = row == ROW_LEFT;
-        r = profileRow(row == ROW_LEFT ? 80 : 110, 26, row,
+        r = profileRow(row == ROW_LEFT ? 112 : 142, 26, row,
                        left ? "LEFT" : "RIGHT");
         char *text = buttonName(left ? me()->lkey : me()->rkey);
         uiText(screen, FONT_MENU, text[0] != '\0' ? text : "...", uiColText,
@@ -887,10 +940,10 @@ static void displayLobby(void)
     char line[48];
     snprintf(line, sizeof(line), "%d / %d  %s", memberCount(), NET_MAX_NODES,
              netIsHost() ? "PLAYERS" : "WAITING FOR THE HOST");
-    uiText(screen, FONT_BROADCAST, line, uiColDim, 160, 148, UI_CENTER);
+    uiText(screen, FONT_BROADCAST, line, uiColDim, 160, 174, UI_CENTER);
 
     if (netIsHost()) {
-        SDL_Rect go = {16, 168, 288, 34};
+        SDL_Rect go = {16, 186, 288, 28};
         touchAdd(go, ROW_START, TOUCH_ROW);
         uiTile(screen, go, "START", NULL, NULL, uiColGreen,
                lobbyRow == ROW_START, true);

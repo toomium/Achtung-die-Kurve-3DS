@@ -26,6 +26,7 @@ enum { NET_TICK_CONTINUE = 0,   /* Host: go on with the normal logic */
 struct netSeat {
     char name[13];
     unsigned char color;
+    unsigned char head;         /* Shop head marker, see player.h */
     bool ai;
     bool local;                 /* Steered on this console */
     int node;                   /* The console it belongs to, 0 for AI */

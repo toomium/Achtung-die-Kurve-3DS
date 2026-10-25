@@ -45,4 +45,18 @@ unsigned int platformMillis(void);
  */
 bool platformTextInput(char *text, size_t size, const char *hint);
 
+/*
+ * The Play Coins of the system (gamecoin.dat in the shared extdata of the
+ * pedometer service). Reading is harmless. Spending writes two bytes of a
+ * system file that the HOME menu needs at startup, so it checks the file first
+ * and reads the value back afterwards.
+ *
+ * platformCoinsRead() returns false if the file cannot be opened or does not
+ * look as expected (an emulator without the file, missing rights).
+ * platformCoinsSpend() returns true only if the coins were taken and the new
+ * value was read back.
+ */
+bool platformCoinsRead(unsigned int *coins);
+bool platformCoinsSpend(unsigned int amount);
+
 #endif

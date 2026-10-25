@@ -165,7 +165,7 @@ static void lose(struct worm *w)
 static void step(int slot)
 {
     struct worm *w = &worms[slot];
-    SDL_Color color = colors[slot % N_COLORS];
+    SDL_Color color = colors[slot % N_BASE_COLORS];
 
     /* Now and then a new turning rate to aim for. */
     w->changeIn -= STEP;
@@ -270,7 +270,7 @@ static void dropLine(int slot)
             int at = (ofirst + k) % TRAIL;
             if (o->px[at] >= w->x0 - 2 && o->px[at] <= w->x1 + 2
                     && o->py[at] >= w->y0 - 2 && o->py[at] <= w->y1 + 2)
-                plot(o->px[at], o->py[at], colors[i % N_COLORS]);
+                plot(o->px[at], o->py[at], colors[i % N_BASE_COLORS]);
         }
     }
     w->used = false;
@@ -325,7 +325,7 @@ void demoUpdate(void)
         if (w->fade >= FADE_TIME)
             dropLine(i);
         else
-            drawLine(w, uiMix(colors[i % N_COLORS], bg, 100 * w->fade / FADE_TIME));
+            drawLine(w, uiMix(colors[i % N_BASE_COLORS], bg, 100 * w->fade / FADE_TIME));
     }
 }
 

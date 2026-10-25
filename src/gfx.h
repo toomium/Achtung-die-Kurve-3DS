@@ -9,7 +9,12 @@
 #include "data.h"
 #include "error.h"
 
-#define N_COLORS 8 /* Number of available player colors */
+#define N_BASE_COLORS 8 /* The colors every player has */
+#ifdef __3DS__
+#define N_COLORS 24     /* ... and 16 more that the shop sells */
+#else
+#define N_COLORS 8
+#endif
 
 extern SDL_Color colors[N_COLORS];
 

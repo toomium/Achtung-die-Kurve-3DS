@@ -31,6 +31,9 @@ struct player {
     button rkey;
     button wkey;
     int holecount;
+#ifdef __3DS__
+    unsigned char headStyle;   /* Shop item + 1 for the head marker, 0: none */
+#endif
 };
 
 extern struct player players[MAX_PLAYERS];

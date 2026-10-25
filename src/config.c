@@ -16,6 +16,7 @@
  */
 
 #include "config.h"
+#include "gfx.h"
 
 #ifdef __3DS__
 #include "platform.h"
@@ -34,6 +35,13 @@ bool border = DEFAULT_BORDER;
 bool duelmode = DEFAULT_DUELMODE;
 bool shake = DEFAULT_SHAKE;
 bool debugLog = false;
+#ifdef __3DS__
+unsigned long long shopOwned = 0;
+int shopTheme = -1;
+int shopFrame = -1;
+int shopBlast = -1;
+int testCoins = -1;
+#endif
 const char *settingNames[] = {"fullscreen", "sound", "music", "weapons",
                               "holes", "broadcasts", "particleEffects",
                               "border", "duelmode", "shake", "debug"};
@@ -100,9 +108,9 @@ char *getConfigFile(void)
 }
 
 /**
- * Save the current settings to the config file.
+ * Save the current settings to the config file. Return false if that failed.
  */
-void saveSettings(void)
+bool saveSettings(void)
 {
 #ifdef __3DS__
     platformTrace("save: start");
@@ -138,7 +146,7 @@ void saveSettings(void)
                     filename);
         }
         free(filename);
-        return;
+        return false;
     }
 
     for (unsigned int i = 0; i < sizeof(settings) / sizeof(bool*); ++i) {
@@ -147,6 +155,14 @@ void saveSettings(void)
 
     fprintf(file, "scorecap = %d\n", scorecap);
     fprintf(file, "gamespeed = %d\n", gameSpeed);
+#ifdef __3DS__
+    fprintf(file, "owned = %llx\n", shopOwned);
+    fprintf(file, "theme = %d\n", shopTheme);
+    fprintf(file, "frame = %d\n", shopFrame);
+    fprintf(file, "blast = %d\n", shopBlast);
+    if (testCoins >= 0)
+        fprintf(file, "testcoins = %d\n", testCoins);
+#endif
     for (unsigned int i = 0; i < MAX_PLAYERS; ++i) {
 #ifdef __3DS__
         struct player *sp = slotConfig(i);
@@ -156,6 +172,9 @@ void saveSettings(void)
 #endif
         fprintf(file, "%dn = %s\n", i + 1, sp->name);
         fprintf(file, "%dc = %d\n", i + 1, sp->color);
+#ifdef __3DS__
+        fprintf(file, "%dh = %d\n", i + 1, sp->headStyle);
+#endif
         fprintf(file, "%da = %d\n", i + 1, sp->ai);
         fprintf(file, "%dl = %d\n", i + 1, sp->lkey);
         fprintf(file, "%dw = %d\n", i + 1, sp->wkey);
@@ -181,10 +200,12 @@ void saveSettings(void)
     fflush(file);
     platformTrace("save: fflush (write)");
 #endif
-    fclose(file);
+    bool ok = !ferror(file);
+    ok = fclose(file) == 0 && ok;
 #ifdef __3DS__
     platformTrace("save: fclose");
 #endif
+    return ok;
 }
 
 /**
@@ -209,7 +230,7 @@ void restoreSettings(void)
     int line = 0;
     bool valid = false;
 
-    while ((fscanf(file, "%s = %s\n", setting, value)) != EOF) {
+    while ((fscanf(file, "%31s = %31[^\n]\n", setting, value)) != EOF) {
         valid = false;
         for (unsigned int i = 0; i < sizeof(settings)/sizeof(bool*); ++i) {
             if (strncmp(settingNames[i], setting, STRBUF) == 0) {
@@ -227,7 +248,29 @@ void restoreSettings(void)
             gameSpeed = atoi(value);
             valid = true;
         }
-        else if (!valid && isdigit(setting[0])) {
+#ifdef __3DS__
+        else if (!valid && strncmp("owned", setting, STRBUF) == 0) {
+            shopOwned = strtoull(value, NULL, 16);
+            valid = true;
+        }
+        else if (!valid && strncmp("theme", setting, STRBUF) == 0) {
+            shopTheme = atoi(value);
+            valid = true;
+        }
+        else if (!valid && strncmp("frame", setting, STRBUF) == 0) {
+            shopFrame = atoi(value);
+            valid = true;
+        }
+        else if (!valid && strncmp("blast", setting, STRBUF) == 0) {
+            shopBlast = atoi(value);
+            valid = true;
+        }
+        else if (!valid && strncmp("testcoins", setting, STRBUF) == 0) {
+            testCoins = atoi(value);
+            valid = true;
+        }
+#endif
+        else if (!valid && setting[0] >= '1' && setting[0] <= '0' + MAX_PLAYERS) {
             struct player *p = &players[setting[0] - '0' - 1];
             switch (setting[1]) {
 #ifdef __3DS__
@@ -237,11 +280,19 @@ void restoreSettings(void)
                 break;
 #endif
             case 'n': /* Name */
-                strncpy(p->name, value, PLAYER_NAME_LEN);
+                snprintf(p->name, sizeof(p->name), "%.*s", PLAYER_NAME_LEN - 1,
+                         value);
                 valid = true;
                 break;
+#ifdef __3DS__
+            case 'h': /* Head marker from the shop */
+                p->headStyle = atoi(value);
+                valid = true;
+                break;
+#endif
             case 'c': /* Color */
-                p->color = atoi(value);
+                p->color = (unsigned)atoi(value) < N_COLORS ? atoi(value)
+                                                            : setting[0] - '1';
                 valid = true;
                 break;
             case 'a': /* AI */

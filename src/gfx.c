@@ -135,4 +135,23 @@ void initColors(void)
     c->r = 0x00; c->g = 0xFF; c->b = 0xFF; ++c; /* Cyan */
     c->r = 0xFF; c->g = 0xFF; c->b = 0xFF; ++c; /* White */
     c->r = 0xFF; c->g = 0x80; c->b = 0x00; ++c; /* Orange */
+#ifdef __3DS__
+    /* The colors of the shop. Their names are in zatackax.c. */
+    c->r = 0xA0; c->g = 0x20; c->b = 0xF0; ++c; /* Purple */
+    c->r = 0xFF; c->g = 0x6B; c->b = 0x9D; ++c; /* Rose */
+    c->r = 0x00; c->g = 0xB3; c->b = 0xA0; ++c; /* Teal */
+    c->r = 0xB5; c->g = 0xFF; c->b = 0x2E; ++c; /* Lime */
+    c->r = 0xFF; c->g = 0xC4; c->b = 0x00; ++c; /* Gold */
+    c->r = 0x7B; c->g = 0x5C; c->b = 0xFF; ++c; /* Violet */
+    c->r = 0x66; c->g = 0xCC; c->b = 0xFF; ++c; /* Sky */
+    c->r = 0xFF; c->g = 0x6F; c->b = 0x61; ++c; /* Coral */
+    c->r = 0x7C; c->g = 0xFF; c->b = 0xB2; ++c; /* Mint */
+    c->r = 0xFF; c->g = 0xB3; c->b = 0x8A; ++c; /* Peach */
+    c->r = 0xC9; c->g = 0xA6; c->b = 0xFF; ++c; /* Lavender */
+    c->r = 0xD0; c->g = 0x14; c->b = 0x3C; ++c; /* Crimson */
+    c->r = 0xC4; c->g = 0x7A; c->b = 0x3A; ++c; /* Tan */
+    c->r = 0xBF; c->g = 0xC7; c->b = 0xD5; ++c; /* Silver */
+    c->r = 0x3A; c->g = 0x6B; c->b = 0xFF; ++c; /* Azure */
+    c->r = 0xA5; c->g = 0xB8; c->b = 0x00; ++c; /* Olive */
+#endif
 }
