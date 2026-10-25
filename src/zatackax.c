@@ -1957,11 +1957,6 @@ static void drawTitleBottom(bool blink)
                UI_CENTER);
     uiText(screen, FONT_BROADCAST, "A 3DS PORT OF ZATACKA X", uiColDim,
            screen->w / 2, 160, UI_CENTER);
-    char profile[48];
-    snprintf(profile, sizeof(profile), "%s  -  %u ROUNDS WON", statsTitle(),
-             stats.roundWins);
-    uiText(screen, FONT_BROADCAST, profile, uiColAccent, screen->w / 2, 194,
-           UI_CENTER);
 
     /* The version at the left, the author at the right. */
     uiText(screen, FONT_BROADCAST, "v" PORT_VERSION, uiColDim, 8,
