@@ -88,6 +88,13 @@ bool platformTextInput(char *text, size_t size, const char *hint)
 #define COIN_TOTAL_AT   4           /* u16: the total number of coins */
 #define COIN_MAX        300
 
+static unsigned coinsError = 0;
+
+unsigned platformCoinsError(void)
+{
+    return coinsError;
+}
+
 /* Opens the file with the given flags; the archive stays open until the file
  * is closed with coinsClose(). */
 static bool coinsOpen(FS_Archive *archive, Handle *file, u32 flags)
@@ -102,6 +109,7 @@ static bool coinsOpen(FS_Archive *archive, Handle *file, u32 flags)
         Result rc = FSUSER_OpenArchive(archive, ARCHIVE_SHARED_EXTDATA,
                                        archivePath);
         if (R_FAILED(rc)) {
+            coinsError = rc;
             fprintf(stderr, "coins: open archive 0x%08x: 0x%08lx\n",
                     (unsigned)highWords[i], (unsigned long)rc);
             continue;
@@ -110,6 +118,7 @@ static bool coinsOpen(FS_Archive *archive, Handle *file, u32 flags)
                              flags, 0);
         if (R_SUCCEEDED(rc))
             return true;
+        coinsError = rc;
         fprintf(stderr, "coins: open file: 0x%08lx\n", (unsigned long)rc);
         FSUSER_CloseArchive(*archive);
     }
@@ -129,15 +138,20 @@ static bool coinsReadTotal(Handle file, unsigned int *total)
     u64 size = 0;
     u32 got = 0;
 
-    if (R_FAILED(FSFILE_GetSize(file, &size)) || size < COIN_HEADER)
+    if (R_FAILED(FSFILE_GetSize(file, &size)) || size < COIN_HEADER) {
+        coinsError = 1;
         return false;
+    }
     if (R_FAILED(FSFILE_Read(file, &got, 0, head, sizeof(head)))
-        || got != sizeof(head))
+        || got != sizeof(head)) {
+        coinsError = 1;
         return false;
+    }
 
     u32 magic = head[0] | head[1] << 8 | head[2] << 16 | (u32)head[3] << 24;
     unsigned int count = head[COIN_TOTAL_AT] | head[COIN_TOTAL_AT + 1] << 8;
     if (magic != COIN_MAGIC || count > COIN_MAX) {
+        coinsError = 1;
         fprintf(stderr, "coins: unexpected file, magic 0x%x total %u\n",
                 (unsigned)magic, count);
         return false;

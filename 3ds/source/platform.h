@@ -57,6 +57,10 @@ bool platformTextInput(char *text, size_t size, const char *hint);
  * value was read back.
  */
 bool platformCoinsRead(unsigned int *coins);
+
+/* What went wrong the last time: the result code of the system, or 1 if the
+ * file is not what was expected. For the shop, to tell what is missing. */
+unsigned platformCoinsError(void);
 bool platformCoinsSpend(unsigned int amount);
 
 #endif

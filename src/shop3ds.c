@@ -740,6 +740,10 @@ static void drawShopTop(void)
     } else {
         uiText(screen, FONT_BROADCAST, "NO DATA", uiColRed,
                purse.x + purse.w - 12, purse.y + 16, UI_RIGHT);
+        /* Why, for whoever has to find out. */
+        char why[24];
+        snprintf(why, sizeof(why), "ERROR %08X", platformCoinsError());
+        uiText(screen, FONT_BROADCAST, why, uiColDim, cx, 54, UI_CENTER);
     }
 
     int item = cardItem(tab, sel);
