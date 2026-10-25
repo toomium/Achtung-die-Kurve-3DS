@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
-"""Draws the logo of the 3DS build: "Achtung, die Kurve!" in the pixel font, over
-a ribbon of four trails. Writes the title logo (assets/gfx/logo.png) and the
-banner of the CIA (banner.png). Needs Pillow.
+"""Draws the logo of the 3DS build: "Achtung, die Kurve!" in the pixel font. Writes
+the title logo (assets/gfx/logo.png), the banner of the CIA (banner.png) and the
+icon (icon.png): a road sign that warns of a curve. Needs Pillow.
 
     python3 3ds/tools/make-logo.py
 """
-import math
 import os
 
 from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
@@ -14,8 +13,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 FONT = os.path.join(HERE, "..", "assets", "fonts", "PressStart2P-Regular.ttf")
 
 NAVY = (18, 22, 46)
-RED, BLUE, GREEN, YELLOW = (255, 107, 107), (95, 174, 255), (95, 215, 120), (255, 200, 87)
-TRAILS = [RED, BLUE, GREEN, YELLOW]
+RED, YELLOW = (255, 107, 107), (255, 200, 87)
 
 
 def text_mask(text, k):
@@ -54,50 +52,32 @@ def put_text(canvas, text, k, x, y, top, bottom, shadow):
     return mask.size
 
 
-def ribbon(canvas, y0, amp, unit, width):
-    """Four trails side by side, with holes, each ending in a head."""
-    d = ImageDraw.Draw(canvas)
-    gap = unit * 4
-    holes = [(0.30, 0.34), (0.55, 0.60), (0.20, 0.23), (0.72, 0.77)]
-    ends = [0.86, 0.92, 0.98, 0.95]
-    for i, color in enumerate(TRAILS):
-        x = 0
-        end = int(width * ends[i])
-        last = None
-        while x < end:
-            t = x / width
-            if not any(a <= t <= b for a, b in holes[i:i + 1] + holes[(i + 2) % 4:(i + 2) % 4 + 1]):
-                y = y0 + (i - 1.5) * gap + amp * math.sin(t * 2 * math.pi * 1.5 + 0.6)
-                gx, gy = round(x / unit) * unit, round(y / unit) * unit
-                if (gx, gy) != last:
-                    d.rectangle([gx, gy, gx + unit * 2 - 1, gy + unit * 2 - 1],
-                                fill=color + (255,))
-                    last = (gx, gy)
-            x += 1
-        # the head: a bigger, lighter diamond where the trail stops
-        t = end / width
-        y = y0 + (i - 1.5) * gap + amp * math.sin(t * 2 * math.pi * 1.5 + 0.6)
-        cx, cy = round(end / unit) * unit, round(y / unit) * unit
-        light = tuple((c + 255) // 2 for c in color)
-        for ox, oy in ((0, 0), (-1, 0), (1, 0), (0, -1), (0, 1)):
-            d.rectangle([cx + ox * unit, cy + oy * unit,
-                         cx + (ox + 1) * unit, cy + (oy + 1) * unit],
-                        fill=light + (255,))
 
-
-def logo(width, k1, k2, unit, amp, height):
+def logo(width, k1, k2, height):
     canvas = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     w1 = 8 * 8 * k1
     w2 = 10 * 8 * k2
-    y = 4 * k1
-    put_text(canvas, "ACHTUNG,", k1, (width - w1) // 2, y, (255, 232, 160),
+    gap = 3 * k1
+    top = (height - (8 * k1 + gap + 8 * k2)) // 2
+    put_text(canvas, "ACHTUNG,", k1, (width - w1) // 2, top, (255, 232, 160),
              YELLOW, (150, 60, 20))
-    y += 8 * k1 + 3 * k1
-    put_text(canvas, "DIE KURVE!", k2, (width - w2) // 2, y, (255, 255, 255),
-             (170, 195, 255), (170, 30, 50))
-    y += 8 * k2 + 4 * unit
-    ribbon(canvas, y + (height - y) // 2, amp, unit, width)
+    put_text(canvas, "DIE KURVE!", k2, (width - w2) // 2, top + 8 * k1 + gap,
+             (255, 255, 255), (170, 195, 255), (170, 30, 50))
     return canvas
+
+
+def sign():
+    """The icon: the road sign "curve ahead", a triangle with a bent arrow."""
+    icon = gradient((48, 48), (27, 33, 64), (10, 12, 30)).convert("RGBA")
+    d = ImageDraw.Draw(icon)
+    d.polygon([(24, 1), (47, 44), (1, 44)], fill=(214, 40, 40, 255))
+    d.polygon([(24, 10), (40, 39), (8, 39)], fill=(255, 255, 255, 255))
+    dark = (24, 24, 32, 255)
+    # The way: up from the bottom, then a bend to the right.
+    path = [(19, 37), (19, 31), (20, 27), (22, 25), (25, 24)]
+    d.line(path, fill=dark, width=3)
+    d.polygon([(24, 19), (31, 24), (24, 29)], fill=dark)
+    return icon
 
 
 def main():
@@ -105,23 +85,15 @@ def main():
     gfx = os.path.join(out, "assets", "gfx")
     os.makedirs(gfx, exist_ok=True)
 
-    # The title screen: 360 pixels wide, over the animation of the trails.
-    logo(360, 3, 4, 3, 19, 170).save(os.path.join(gfx, "logo.png"))
+    # The title screen: over the animation of the trails.
+    logo(360, 3, 4, 90).save(os.path.join(gfx, "logo.png"))
 
     # The banner of the CIA: 256x128, on a dark ground.
-    banner = Image.new("RGBA", (256, 128), NAVY + (255,))
-    ground = gradient((256, 128), (27, 33, 64), (10, 12, 30)).convert("RGBA")
-    banner.alpha_composite(ground)
-    small = logo(240, 2, 3, 2, 10, 120)
-    banner.alpha_composite(small, (8, 4))
+    banner = gradient((256, 128), (27, 33, 64), (10, 12, 30)).convert("RGBA")
+    banner.alpha_composite(logo(256, 2, 3, 128))
     banner.convert("RGB").save(os.path.join(out, "banner.png"))
 
-    # The icon in the HOME menu: 48x48, the ribbon bending over the dark ground.
-    icon = gradient((48, 48), (27, 33, 64), (10, 12, 30)).convert("RGBA")
-    layer = Image.new("RGBA", (48, 48), (0, 0, 0, 0))
-    ribbon(layer, 24, 9, 2, 48)
-    icon.alpha_composite(layer)
-    icon.save(os.path.join(out, "icon.png"))
+    sign().save(os.path.join(out, "icon.png"))
 
 
 if __name__ == "__main__":
